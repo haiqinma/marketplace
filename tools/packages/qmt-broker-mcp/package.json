@@ -1,6 +1,6 @@
 {
   "name": "@yeying-community/qmt-broker-mcp",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "QMT broker MCP server for live A-share strategy trading through MiniQMT and xtquant.",
   "license": "MIT",
   "type": "module",

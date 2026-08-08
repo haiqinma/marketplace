@@ -33,6 +33,50 @@ function jsonResult(data, isError = false) {
   };
 }
 
+function maskAccountId(value) {
+  if (!value) return undefined;
+  if (value.length <= 4) return "****";
+  return `${value.slice(0, 2)}****${value.slice(-2)}`;
+}
+
+function getBaseBrokerStatus(extra = {}) {
+  const qmtUserdataPath = process.env.QMT_USERDATA_PATH;
+  const accountId = process.env.QMT_ACCOUNT_ID;
+  const liveTradingEnabled = envBool("QMT_ENABLE_LIVE_TRADING", false);
+  const requireConfirmation = envBool("QMT_REQUIRE_CONFIRMATION", true);
+
+  return {
+    connectorType: "live",
+    provider: "qmt",
+    tradingMode: liveTradingEnabled ? "live" : "dry_run_only",
+    configured: Boolean(qmtUserdataPath && accountId),
+    connected: undefined,
+    liveTradingEnabled,
+    requireConfirmation,
+    account: {
+      accountId: maskAccountId(accountId),
+      accountType: process.env.QMT_ACCOUNT_TYPE || "STOCK",
+      qmtUserdataPathConfigured: Boolean(qmtUserdataPath),
+      pythonCommand: process.env.QMT_PYTHON || "python3",
+    },
+    capabilities: [
+      "broker_status",
+      "dry_run_order",
+      "place_order",
+      "cancel_order",
+      "query_orders",
+      "query_positions",
+      "query_cash",
+    ],
+    safety: {
+      realOrders: liveTradingEnabled,
+      requiresExplicitConfirmation: requireConfirmation,
+      note: "Real QMT orders require QMT_ENABLE_LIVE_TRADING=true and confirmed=true when confirmation is enabled.",
+    },
+    ...extra,
+  };
+}
+
 class QmtWorker {
   constructor() {
     this.nextId = 1;
@@ -141,6 +185,37 @@ const baseOrderInput = {
 };
 
 function registerTools(server, worker) {
+  server.registerTool(
+    "broker_status",
+    {
+      title: "Get QMT broker status",
+      description:
+        "Return QMT configuration, live-trading safety state, available capabilities, and optionally check the MiniQMT connection.",
+      inputSchema: {
+        checkConnection: z
+          .boolean()
+          .optional()
+          .describe("When true, also starts the Python worker and checks MiniQMT connectivity."),
+      },
+    },
+    async (input) => {
+      if (input.checkConnection !== true) {
+        return jsonResult(getBaseBrokerStatus());
+      }
+
+      try {
+        return jsonResult(await worker.call("broker_status", input));
+      } catch (error) {
+        return jsonResult(
+          getBaseBrokerStatus({
+            connected: false,
+            reason: error instanceof Error ? error.message : String(error),
+          }),
+        );
+      }
+    },
+  );
+
   server.registerTool(
     "dry_run_order",
     {

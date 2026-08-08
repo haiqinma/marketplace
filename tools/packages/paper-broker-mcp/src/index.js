@@ -56,6 +56,38 @@ function createState() {
   };
 }
 
+function getBrokerStatus(state) {
+  return {
+    connectorType: "paper",
+    provider: "paper-broker",
+    tradingMode: "simulation",
+    configured: true,
+    connected: true,
+    liveTradingEnabled: false,
+    requireConfirmation: state.requireConfirmation,
+    account: {
+      market: state.market,
+      currency: state.currency,
+      cash: state.cash,
+      available: state.cash,
+    },
+    capabilities: [
+      "broker_status",
+      "dry_run_order",
+      "place_order",
+      "cancel_order",
+      "query_orders",
+      "query_positions",
+      "query_cash",
+    ],
+    safety: {
+      realOrders: false,
+      requiresExplicitConfirmation: state.requireConfirmation,
+      note: "This connector never submits real broker orders.",
+    },
+  };
+}
+
 function getPosition(state, symbol) {
   const existing = state.positions.get(symbol);
   if (existing) return existing;
@@ -185,6 +217,17 @@ const baseOrderInput = {
 };
 
 function registerTools(server, state) {
+  server.registerTool(
+    "broker_status",
+    {
+      title: "Get paper broker status",
+      description:
+        "Return simulated broker mode, account state, available capabilities, and safety constraints.",
+      inputSchema: {},
+    },
+    async () => jsonResult(getBrokerStatus(state)),
+  );
+
   server.registerTool(
     "dry_run_order",
     {

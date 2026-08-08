@@ -2,7 +2,7 @@
   {
     "id": "strategy-trading",
     "lang": "cn",
-    "version": "1.0.0",
+    "version": "1.0.1",
     "name": {
       "cn": "策略交易",
       "en": "Strategy Trading"
@@ -76,7 +76,7 @@
   {
     "id": "strategy-trading",
     "lang": "en",
-    "version": "1.0.0",
+    "version": "1.0.1",
     "name": {
       "cn": "策略交易",
       "en": "Strategy Trading"

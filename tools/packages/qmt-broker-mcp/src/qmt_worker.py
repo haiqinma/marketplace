@@ -64,6 +64,15 @@ def object_to_dict(obj):
     return result
 
 
+def mask_account_id(value):
+    if not value:
+        return None
+    text = str(value)
+    if len(text) <= 4:
+        return "****"
+    return f"{text[:2]}****{text[-2:]}"
+
+
 def connect_qmt():
     global TRADER, ACCOUNT, XTCONSTANT
     if TRADER is not None and ACCOUNT is not None:
@@ -103,6 +112,53 @@ def connect_qmt():
     TRADER = trader
     ACCOUNT = account
     XTCONSTANT = xtconstant
+
+
+def broker_status(params=None):
+    params = params or {}
+    qmt_path = os.environ.get("QMT_USERDATA_PATH")
+    account_id = os.environ.get("QMT_ACCOUNT_ID")
+    live_trading_enabled = env_bool("QMT_ENABLE_LIVE_TRADING", False)
+    require_confirmation = env_bool("QMT_REQUIRE_CONFIRMATION", True)
+    status = {
+        "connectorType": "live",
+        "provider": "qmt",
+        "tradingMode": "live" if live_trading_enabled else "dry_run_only",
+        "configured": bool(qmt_path and account_id),
+        "connected": None,
+        "liveTradingEnabled": live_trading_enabled,
+        "requireConfirmation": require_confirmation,
+        "account": {
+            "accountId": mask_account_id(account_id),
+            "accountType": os.environ.get("QMT_ACCOUNT_TYPE", "STOCK"),
+            "qmtUserdataPathConfigured": bool(qmt_path),
+            "pythonCommand": os.environ.get("QMT_PYTHON", "python3"),
+        },
+        "capabilities": [
+            "broker_status",
+            "dry_run_order",
+            "place_order",
+            "cancel_order",
+            "query_orders",
+            "query_positions",
+            "query_cash",
+        ],
+        "safety": {
+            "realOrders": live_trading_enabled,
+            "requiresExplicitConfirmation": require_confirmation,
+            "note": "Real QMT orders require QMT_ENABLE_LIVE_TRADING=true and confirmed=true when confirmation is enabled.",
+        },
+    }
+
+    if params.get("checkConnection"):
+        try:
+            connect_qmt()
+            status["connected"] = True
+        except Exception as exc:
+            status["connected"] = False
+            status["reason"] = str(exc)
+
+    return status
 
 
 def get_cash_amount(asset):
@@ -353,6 +409,7 @@ def query_orders(params=None):
 
 
 METHODS = {
+    "broker_status": broker_status,
     "dry_run_order": dry_run_order,
     "place_order": place_order,
     "cancel_order": cancel_order,

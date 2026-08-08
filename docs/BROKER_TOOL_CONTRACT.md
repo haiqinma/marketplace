@@ -10,6 +10,27 @@
 
 ## 工具列表
 
+### `broker_status`
+
+查询连接器状态、执行模式和安全约束。模型和 Chat 必须先用它判断当前能力边界，再决定是否进入模拟、实盘前检查或实盘执行。
+
+输入：
+
+- `checkConnection`：可选，是否真实检查本地 broker 连接。默认不检查，避免状态页或普通对话意外拉起本地交易环境。
+
+输出：
+
+- `connectorType`：`live` 或 `paper`
+- `provider`：连接器名称，例如 `qmt` 或 `paper-broker`
+- `tradingMode`：`plan_only`、`simulation`、`dry_run_only` 或 `live`
+- `configured`：必要配置是否存在
+- `connected`：连接状态；未检查时可为空
+- `liveTradingEnabled`：是否允许真实下单
+- `requireConfirmation`：`place_order` 是否要求 `confirmed=true`
+- `account`：脱敏后的账号和环境摘要
+- `capabilities`：支持的工具能力列表
+- `safety`：实盘、确认和风控说明
+
 ### `dry_run_order`
 
 校验订单但不提交。
@@ -98,9 +119,21 @@
 
 ## 安全规则
 
+- `broker_status` 必须可在不泄露密钥、不泄露完整账号的情况下返回状态。
+- `broker_status` 默认不应强制连接真实 broker，除非调用方传入 `checkConnection=true`。
 - 默认只允许 `dry_run_order`，除非用户显式启用真实下单。
 - 实盘 `place_order` 必须依赖用户显式确认。
 - 实盘 connector 必须暴露是否启用真实下单的配置，例如 `enableLiveTrading`。
 - connector 必须返回订单 ID 和状态，不能只返回成功文本。
 - connector 必须暴露资金、持仓和订单查询能力，便于 skill 做执行前后校验。
 - connector 不应把密钥写进 marketplace 包；密钥只能由用户运行时配置。
+
+## 自动化执行规则
+
+- 自动化方案属于 skill，自动化执行能力属于 broker tool。
+- 没有 broker tool 时，skill 只能输出 `plan_only`。
+- 只有 `paper-broker` 时，skill 只能进入 `paper_run`，不能声称已经实盘。
+- 真实 broker 的 `liveTradingEnabled=false` 时，只允许 `dry_run_order` 和查询类能力。
+- 从 `precheck` 进入 `armed` 必须有用户明确确认。
+- 从 `armed` 调用 `place_order` 必须带 `confirmed=true`，并记录 `clientOrderId` 或等价审计 ID。
+- 任一风控条件失败、连接失败、用户暂停或 kill switch 触发时，应进入 `paused` 或 `error`。

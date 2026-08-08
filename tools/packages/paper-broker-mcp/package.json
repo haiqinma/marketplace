@@ -1,6 +1,6 @@
 {
   "name": "@yeying-community/paper-broker-mcp",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Paper broker MCP server for strategy trading dry-run and simulated order execution.",
   "license": "MIT",
   "type": "module",

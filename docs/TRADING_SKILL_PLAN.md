@@ -21,12 +21,46 @@
 - `qmt-broker` 是 A 股/ETF/可转债实盘连接器入口，需要用户开通券商 QMT/miniQMT 和 xtquant 环境。
 - `paper-broker` 只是可选测试工具，用于开发验证和模拟演练，不能代表生产实盘。
 
+## 自动化运行链路
+
+策略交易的自动化不是“模型直接下单”，而是一个有状态、有确认、有风控的执行流程。
+
+### 执行阶段
+
+- `plan_only`：只生成策略、风控和待执行计划。没有 broker 工具时只能停在这一阶段。
+- `paper_run`：使用 `paper-broker` 做模拟演练，验证订单参数、资金影响和持仓变化。
+- `precheck`：使用真实 broker 的 `broker_status`、`query_cash`、`query_positions`、`query_orders` 和 `dry_run_order` 做实盘前检查。
+- `armed`：用户明确确认实盘，且工具返回 `liveTradingEnabled=true`，策略进入待执行状态。
+- `live_running`：调用真实 broker 的 `place_order`，并传入 `confirmed=true`。
+- `paused` / `error`：触发 kill switch、风控失败、连接失败或用户暂停时停止执行。
+
+### 自动化必须包含的约束
+
+- 触发频率：例如手动、每 5 分钟、每日收盘前。
+- 标的范围：明确股票、ETF、可转债或自选池。
+- 单笔上限：限制单次下单金额或数量。
+- 最大仓位：限制单标的和总账户敞口。
+- 止损 / 止盈：明确价格、比例或信号条件。
+- 日亏损上限：达到阈值后进入 `paused`。
+- kill switch：用户或系统可以立即停止自动执行。
+- 人工确认点：至少在从 `precheck` 进入 `armed` 时要求用户确认。
+
+### 工具调用顺序
+
+1. `ifind-data` 获取行情、基本面、公告、选股等数据。
+2. broker 工具调用 `broker_status` 判断当前只能计划、可模拟还是可实盘。
+3. 实盘前调用 `query_cash`、`query_positions`、`query_orders`。
+4. 每一笔候选订单先调用 `dry_run_order`。
+5. 只有用户确认实盘、`liveTradingEnabled=true`、风控通过时，才调用 `place_order`。
+6. 下单后调用 `query_orders` 回查订单状态，并输出审计摘要。
+
 ## 后续扩展
 
 ### 1. Broker Tool
 
 真实 broker connector 至少要支持：
 
+- `broker_status`
 - `place_order`
 - `cancel_order`
 - `query_orders`
