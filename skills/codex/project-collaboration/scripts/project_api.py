@@ -119,13 +119,16 @@ def load_config() -> dict[str, str]:
 
 
 def canonical_query(params: dict[str, Any]) -> str:
+    """Build canonical query string matching PHP's http_build_query(RFC3986)."""
     items: list[tuple[str, str]] = []
     for key in sorted(params):
         value = params[key]
-        values = value if isinstance(value, list) else [value]
-        for item in values:
-            items.append((key, str(item)))
-    return urllib.parse.urlencode(items, doseq=True, quote_via=urllib.parse.quote)
+        if isinstance(value, list):
+            for i, item in enumerate(value):
+                items.append((f"{key}[{i}]", str(item)))
+        else:
+            items.append((key, str(value)))
+    return urllib.parse.urlencode(items, quote_via=urllib.parse.quote)
 
 
 def request_api(
@@ -174,6 +177,74 @@ def request_api(
     except (urllib.error.URLError, TimeoutError, json.JSONDecodeError) as exc:
         raise ProjectApiError(f"请求 Project 失败: {exc}") from exc
 
+    if payload.get("ret") != 1:
+        raise ProjectApiError(str(payload.get("msg") or "Project API 返回失败"))
+    return payload.get("data")
+
+
+
+def build_multipart(file_field: str, file_path: Path) -> tuple[bytes, str]:
+    """Build a multipart/form-data body containing only the file field."""
+    boundary = "----yeying-skill-boundary-" + secrets.token_hex(16)
+    file_data = file_path.read_bytes()
+    filename = file_path.name
+    body = (
+        f"--{boundary}\r\n".encode()
+        + (
+            f'Content-Disposition: form-data; name="{file_field}"; filename="{filename}"\r\n'
+            f"Content-Type: application/octet-stream\r\n\r\n"
+        ).encode()
+        + file_data
+        + f"\r\n--{boundary}--\r\n".encode()
+    )
+    return body, f"multipart/form-data; boundary={boundary}"
+
+
+def request_upload(
+    config: dict[str, str],
+    path: str,
+    params: dict[str, Any],
+    file_field: str,
+    file_path: Path,
+) -> Any:
+    """Upload a file via multipart/form-data with AK/SK signing.
+
+    Query parameters (pid, cover, etc.) go into the URL so the server's
+    signature verification can see them. Only the file binary goes in the body.
+    """
+    body, content_type = build_multipart(file_field, file_path)
+    timestamp = dt.datetime.now(dt.timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z")
+    nonce = secrets.token_hex(16)
+    query = canonical_query(params)
+    # Swoole parses multipart before getContent() runs, so the server sees an empty
+    # body. Sign with the empty-string hash to match the server-side canonical.
+    canonical = "\n".join(
+        ["POST", path, query, hashlib.sha256(b"").hexdigest(), timestamp, nonce]
+    )
+    derived_key = hashlib.sha256(config["secret_key"].encode("utf-8")).hexdigest().encode("ascii")
+    signature = hmac.new(derived_key, canonical.encode("utf-8"), hashlib.sha256).hexdigest()
+    url = f"{config['url']}{path}"
+    if query:
+        url = f"{url}?{query}"
+    headers = {
+        "Accept": "application/json",
+        "Content-Type": content_type,
+        "X-YY-AK": config["access_key"],
+        "X-YY-Timestamp": timestamp,
+        "X-YY-Nonce": nonce,
+        "X-YY-Signature": signature,
+        "User-Agent": "yeying-project-collaboration-skill/1.0",
+    }
+    request = urllib.request.Request(url, data=body, headers=headers, method="POST")
+    try:
+        with urllib.request.urlopen(request, timeout=120) as response:
+            content = response.read()
+            payload = json.loads(content.decode("utf-8"))
+    except urllib.error.HTTPError as exc:
+        detail = exc.read().decode("utf-8", errors="replace")
+        raise ProjectApiError(f"HTTP {exc.code}: {detail}") from exc
+    except (urllib.error.URLError, TimeoutError, json.JSONDecodeError) as exc:
+        raise ProjectApiError(f"上传文件失败: {exc}") from exc
     if payload.get("ret") != 1:
         raise ProjectApiError(str(payload.get("msg") or "Project API 返回失败"))
     return payload.get("data")
@@ -228,6 +299,55 @@ def build_parser() -> argparse.ArgumentParser:
     download = subparsers.add_parser("download", help="下载文件")
     download.add_argument("--file-id", type=int, required=True)
     download.add_argument("--output", type=Path, required=True)
+
+    # --- 文件柜管理 ---
+
+    file_lists = subparsers.add_parser("file-lists", help="列出文件柜目录")
+    file_lists.add_argument("--pid", type=int, default=0, help="父级文件夹ID，默认为根目录")
+
+    file_one = subparsers.add_parser("file-one", help="获取文件元信息")
+    file_one.add_argument("--id", type=int, required=True)
+    file_one.add_argument("--with-url", choices=("yes", "no"), default="no")
+    file_one.add_argument("--with-text", choices=("yes", "no"), default="no")
+    file_one.add_argument("--text-offset", type=int, default=0)
+    file_one.add_argument("--text-limit", type=int, default=50000)
+
+    file_add = subparsers.add_parser("file-add", help="创建文件夹或文档")
+    file_add.add_argument("--name", required=True)
+    file_add.add_argument("--type", required=True, choices=("folder", "document", "mind", "drawio", "word", "excel", "ppt"))
+    file_add.add_argument("--pid", type=int, default=0)
+    file_add.add_argument("--id", type=int, help="重命名已有文件")
+
+    file_save = subparsers.add_parser("file-save", help="保存文档内容（Markdown/文本）")
+    file_save.add_argument("--id", type=int, required=True)
+    file_save_content = file_save.add_mutually_exclusive_group(required=True)
+    file_save_content.add_argument("--content")
+    file_save_content.add_argument("--content-file", type=Path)
+
+    file_read = subparsers.add_parser("file-read", help="读取文档内容（返回纯文本）")
+    file_read.add_argument("--id", type=int, required=True)
+
+    file_upload = subparsers.add_parser("file-upload", help="上传本地文件到文件柜")
+    file_upload.add_argument("--pid", type=int, default=0, help="目标父文件夹ID")
+    file_upload.add_argument("--file", type=Path, required=True, help="本地文件路径")
+    file_upload.add_argument("--cover", type=int, choices=(0, 1), default=0, help="是否覆盖同名文件")
+
+    file_search = subparsers.add_parser("file-search", help="搜索文件")
+    file_search.add_argument("--key")
+    file_search.add_argument("--take", type=int, default=50)
+
+    file_link = subparsers.add_parser("file-link", help="生成或获取文件分享链接")
+    file_link.add_argument("--id", type=int, required=True)
+    file_link.add_argument("--refresh", choices=("yes", "no"), default="no")
+    file_link.add_argument("--guest-access", choices=("yes", "no"), default="no")
+
+    file_remove = subparsers.add_parser("file-remove", help="删除文件或文件夹")
+    file_remove.add_argument("--ids", nargs="+", type=int, required=True)
+
+    file_move = subparsers.add_parser("file-move", help="移动文件或文件夹")
+    file_move.add_argument("--ids", nargs="+", type=int, required=True)
+    file_move.add_argument("--pid", type=int, required=True, help="目标父文件夹ID")
+
     return parser
 
 
@@ -297,13 +417,50 @@ def main() -> int:
             data = request_api(config, "POST", "/api/project/task/update", params)
         elif args.command == "file-info":
             data = request_api(config, "GET", "/api/project/task/filedetail", {"file_id": args.file_id})
-        else:
+        elif args.command == "download":
             data = request_api(
                 config, "GET", "/api/project/task/filedown", {"file_id": args.file_id}, raw=True
             )
             args.output.parent.mkdir(parents=True, exist_ok=True)
             args.output.write_bytes(data)
             data = {"file_id": args.file_id, "output": str(args.output), "size": len(data)}
+        elif args.command == "file-lists":
+            data = request_api(config, "GET", "/api/file/lists", {"pid": args.pid})
+        elif args.command == "file-one":
+            params = {"id": args.id, "with_url": args.with_url, "with_text": args.with_text}
+            if args.with_text == "yes":
+                params["text_offset"] = args.text_offset
+                params["text_limit"] = args.text_limit
+            data = request_api(config, "GET", "/api/file/one", params)
+        elif args.command == "file-add":
+            params = {"name": args.name, "type": args.type, "pid": args.pid}
+            if args.id:
+                params["id"] = args.id
+            data = request_api(config, "GET", "/api/file/add", params)
+        elif args.command == "file-save":
+            text = args.content
+            if args.content_file:
+                text = args.content_file.read_text(encoding="utf-8")
+            content_payload = json.dumps({"type": "md", "content": text}, ensure_ascii=False)
+            data = request_api(config, "POST", "/api/file/content/save", {"id": args.id, "content": content_payload})
+        elif args.command == "file-read":
+            data = request_api(config, "GET", "/api/file/content", {"id": args.id, "down": "no"})
+        elif args.command == "file-upload":
+            fields = {"pid": str(args.pid), "cover": str(args.cover)}
+            data = request_upload(config, "/api/file/content/upload", fields, "files", args.file)
+        elif args.command == "file-search":
+            params = {"take": args.take}
+            if args.key:
+                params["key"] = args.key
+            data = request_api(config, "GET", "/api/file/search", params)
+        elif args.command == "file-link":
+            data = request_api(config, "GET", "/api/file/link", {
+                "id": args.id, "refresh": args.refresh, "guest_access": args.guest_access,
+            })
+        elif args.command == "file-remove":
+            data = request_api(config, "GET", "/api/file/remove", {"ids": args.ids})
+        elif args.command == "file-move":
+            data = request_api(config, "GET", "/api/file/move", {"ids": args.ids, "pid": args.pid})
         print(json.dumps(data, ensure_ascii=False, indent=2))
         return 0
     except (ProjectApiError, OSError) as exc:
