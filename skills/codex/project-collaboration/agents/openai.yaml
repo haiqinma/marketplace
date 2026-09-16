@@ -1,4 +1,0 @@
-interface:
-  display_name: "Project 自动化协作"
-  short_description: "读取 Project 任务并将执行进度和结果写回评论"
-  default_prompt: "使用 $project-collaboration 读取我的 Project 任务并开始协作。"

@@ -6,9 +6,11 @@
 
 当前已经落地的是技能发布流程和 Tool Server 工具包发布流程。模型服务商和存储能力先保留扩展方向，后续需要补各自 schema、审核规则和发布清单。
 
+Codex 执行类技能维护在 `skills/codex/`，用于沉淀工程协作和产品落地方法，格式为 `SKILL.md` 目录结构。它们不进入 Chat 当前加载的 `packages.json`，维护规则见 [Codex 执行类技能](./CODEX_SKILLS.md)。
+
 ## 1. 流程总览
 
-1. 作者在 `skills/<lang>/` 下新增或修改技能包。
+1. 作者在 `skills/chat/<skill-id>/<lang>.json` 下新增或修改技能包。
 2. 作者运行 `npm run check` 生成 `index.json` 和 `packages.json`。
 3. 作者提交 Pull Request。
 4. 维护者审核技能质量、安全和依赖声明。
@@ -34,12 +36,14 @@ Tool Server 包流程：
 复制模板：
 
 ```bash
-cp templates/skill.json skills/cn/<skill-id>.json
+mkdir -p skills/chat/<skill-id>
+cp templates/skill.json skills/chat/<skill-id>/cn.json
 ```
 
 编辑技能包时重点填写：
 
-- `id`：稳定 ID，使用 kebab-case，例如 `web-research`
+- `id`：稳定 ID，使用 kebab-case，例如 `web-research`；必须和父目录 `skills/chat/<skill-id>/` 中的 `<skill-id>` 一致
+- 文件路径：必须放在 `skills/chat/<skill-id>/<lang>.json`，`<lang>` 当前支持 `cn` 和 `en`
 - `name`：用户看到的名称，必须清晰、聚焦；推荐使用 `{ "cn": "...", "en": "..." }`
 - `description`：说明这个技能适合什么任务；推荐使用 `{ "cn": "...", "en": "..." }`
 - `launch`：点击技能后进入聊天还是工作区

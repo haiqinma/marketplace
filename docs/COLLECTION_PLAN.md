@@ -64,7 +64,7 @@ Remote marketplace skill actions:
 
 ## Release Process
 
-1. Author submits a PR with a new file under `skills/<lang>/`.
+1. Author submits a PR with a new file under `skills/chat/<skill-id>/<lang>.json`.
 2. CI runs `npm run check`.
 3. Maintainer reviews quality, safety, and license.
 4. Merge updates `packages.json`.

@@ -4,6 +4,8 @@
 
 本仓库维护 Chat 可发现、可安装、可配置的社区能力包，包括技能、工具、模型服务商和后续存储能力。产品层统一使用“技能、工具、模型、存储”四层术语；MCP 只作为工具层当前主要协议和具体实现方式出现。
 
+同时，本仓库的 `skills/codex/` 维护 Codex 执行类技能，用于沉淀社区工程协作、产品 Tool 化、Agent 化等可复用工作方法。Codex 技能采用 `SKILL.md` 目录结构，不进入 Chat 当前加载的 `packages.json`。
+
 ## 产品模型
 
 技能是用户选择的任务入口。技能声明：
@@ -32,8 +34,11 @@
 
 ```txt
 skills/
-  cn/                    中文技能包
-  en/                    英文技能包
+  chat/                  Chat 应用使用的用户技能包
+    <skill-id>/
+      cn.json            中文版本，可选
+      en.json            英文版本，可选
+  codex/                 Codex 执行类技能，不进入 Chat packages.json
 tools/
   servers/               Tool Server 包定义
   packages/              社区维护的 Tool Server 源码包
@@ -48,6 +53,7 @@ templates/
   tool-server.json       Tool Server 包起始模板
 docs/
   SKILL_SPEC.md          技能编写与审核规则
+  CODEX_SKILLS.md        Codex 执行类技能说明
   PUBLISH_FLOW.md        技能发布、上线、配置与使用流程
 index.json               由脚本生成的技能轻量索引，作为发布清单提交
 packages.json            由脚本生成的技能包列表，供 Chat 当前版本加载
@@ -55,11 +61,11 @@ scripts/
   build.mjs              校验并生成技能和工具发布清单
 ```
 
-当前 `scripts/build.mjs` 处理 `skills/` 下的技能包和 `tools/servers/` 下的 Tool Server 包。`providers/` 后续应增加对应 schema 和发布清单生成逻辑。
+当前 `scripts/build.mjs` 处理 `skills/chat/` 下的 Chat 技能包和 `tools/servers/` 下的 Tool Server 包。`providers/` 后续应增加对应 schema 和发布清单生成逻辑。
 
 ## 添加技能
 
-1. 复制 `templates/skill.json` 到 `skills/<lang>/<skill-id>.json`。
+1. 创建 `skills/chat/<skill-id>/`，复制 `templates/skill.json` 为 `skills/chat/<skill-id>/<lang>.json`，例如 `skills/chat/web-research/cn.json`。
 2. 填写任务定义、模型偏好、内置工具、Tool Server 依赖和开场白。
 3. 运行：
 

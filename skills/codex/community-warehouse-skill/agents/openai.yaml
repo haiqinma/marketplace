@@ -1,0 +1,4 @@
+interface:
+  display_name: "Warehouse Tool/Agent 化"
+  short_description: "按统一契约推进 Warehouse Tool 化、MCP 接入与 Agent 编排"
+  default_prompt: "使用 $community-warehouse-skill 评估并推进 Warehouse 的 Tool 化或 Agent 化任务。"
