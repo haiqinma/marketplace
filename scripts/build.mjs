@@ -3,6 +3,7 @@ import path from "node:path";
 
 const root = process.cwd();
 const skillsDir = path.join(root, "skills");
+const chatSkillsDir = path.join(skillsDir, "chat");
 const toolServersDir = path.join(root, "tools", "servers");
 const languages = ["cn", "en"];
 
@@ -68,20 +69,49 @@ function collectSkills() {
   const seen = new Set();
 
   for (const lang of languages) {
-    const dir = path.join(skillsDir, lang);
     grouped[lang] = [];
-    if (!fs.existsSync(dir)) continue;
+  }
 
-    const files = fs
-      .readdirSync(dir)
-      .filter((file) => file.endsWith(".json"))
-      .sort();
+  for (const lang of languages) {
+    const legacyDir = path.join(skillsDir, lang);
+    if (!fs.existsSync(legacyDir)) continue;
+    const legacyFiles = fs.readdirSync(legacyDir).filter((file) => file.endsWith(".json"));
+    assert(
+      legacyFiles.length === 0,
+      `skills/${lang}: Chat skills must be stored as skills/chat/<skill-id>/${lang}.json`,
+    );
+  }
 
-    for (const file of files) {
-      const absolute = path.join(dir, file);
+  if (!fs.existsSync(chatSkillsDir)) {
+    return {
+      skillIndex,
+      grouped,
+    };
+  }
+
+  const skillFolders = fs
+    .readdirSync(chatSkillsDir, { withFileTypes: true })
+    .filter((entry) => entry.isDirectory())
+    .map((entry) => entry.name)
+    .sort();
+
+  for (const skillFolder of skillFolders) {
+    assert(
+      /^[a-z0-9][a-z0-9-]*[a-z0-9]$/.test(skillFolder),
+      `skills/chat/${skillFolder}: folder must be kebab-case`,
+    );
+
+    for (const lang of languages) {
+      const absolute = path.join(chatSkillsDir, skillFolder, `${lang}.json`);
+      if (!fs.existsSync(absolute)) continue;
       const relative = path.relative(root, absolute);
       const skill = readJson(absolute);
       validateSkill(skill, relative);
+
+      assert(
+        skill.id === skillFolder,
+        `${relative}: skill id must match parent folder ${skillFolder}`,
+      );
 
       const key = `${lang}:${skill.id}`;
       assert(!seen.has(key), `${relative}: duplicate skill id ${skill.id}`);

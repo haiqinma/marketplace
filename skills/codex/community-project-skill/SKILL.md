@@ -1,9 +1,9 @@
 ---
-name: project-collaboration
-description: Access YeYing Project's standard APIs with AK/SK-signed access tokens to read projects, tasks, discussions, and files or to update task fields, status, and comments. Also manage the Project file cabinet (list, create, read, save, upload, search, link, move, delete documents). Use when the user asks Codex to fetch work from Project, inspect or update a Project task, download task files, collaborate around a task ID, report progress, synchronize completed work back to Project, or manage shared community documents through the file cabinet.
+name: community-project-skill
+description: Access YeYing community Project's standard APIs with AK/SK-signed access tokens to read projects, tasks, discussions, and files or to update task fields, status, and comments. Also manage the Project file cabinet (list, create, read, save, upload, search, link, move, delete documents). Use when Codex needs to fetch work from the community Project product, inspect or update a Project task, download task files, collaborate around a task ID, report progress, synchronize completed work back to Project, or manage shared community documents through the file cabinet.
 ---
 
-# Project Collaboration
+# Community Project Collaboration
 
 Use the bundled client to treat Project as the source of truth for task context and execution updates, and as the shared hub for community documents. Never place AK/SK credentials in a repository, command output, task comment, or final response.
 

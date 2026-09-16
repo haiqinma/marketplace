@@ -1,5 +1,29 @@
 [
   {
+    "id": "reading-summary",
+    "lang": "en",
+    "version": "1.0.0",
+    "name": {
+      "cn": "阅读总结",
+      "en": "Reading Summary"
+    },
+    "description": {
+      "cn": "将文章、网页或长文本提炼为结构化摘要和行动要点。",
+      "en": "Summarize articles, web pages, or long text into structured takeaways."
+    },
+    "category": "productivity",
+    "tags": [
+      "reading",
+      "summary",
+      "web"
+    ],
+    "path": "skills/chat/reading-summary/en.json",
+    "release": {
+      "status": "published",
+      "review": "approved"
+    }
+  },
+  {
     "id": "strategy-trading",
     "lang": "cn",
     "version": "1.0.1",
@@ -19,7 +43,33 @@
       "risk",
       "automation"
     ],
-    "path": "skills/cn/strategy-trading.json",
+    "path": "skills/chat/strategy-trading/cn.json",
+    "release": {
+      "status": "published",
+      "review": "approved"
+    }
+  },
+  {
+    "id": "strategy-trading",
+    "lang": "en",
+    "version": "1.0.1",
+    "name": {
+      "cn": "策略交易",
+      "en": "Strategy Trading"
+    },
+    "description": {
+      "cn": "把交易想法转成可执行策略、风险约束和下单计划；连接真实券商工具后可进行受控实盘执行。",
+      "en": "Turn a trading idea into an executable strategy, risk policy, and order plan; connect a live broker tool for controlled production execution."
+    },
+    "category": "finance",
+    "tags": [
+      "trading",
+      "strategy",
+      "execution",
+      "risk",
+      "automation"
+    ],
+    "path": "skills/chat/strategy-trading/en.json",
     "release": {
       "status": "published",
       "review": "approved"
@@ -43,57 +93,7 @@
       "web",
       "search"
     ],
-    "path": "skills/cn/web-research.json",
-    "release": {
-      "status": "published",
-      "review": "approved"
-    }
-  },
-  {
-    "id": "reading-summary",
-    "lang": "en",
-    "version": "1.0.0",
-    "name": {
-      "cn": "阅读总结",
-      "en": "Reading Summary"
-    },
-    "description": {
-      "cn": "将文章、网页或长文本提炼为结构化摘要和行动要点。",
-      "en": "Summarize articles, web pages, or long text into structured takeaways."
-    },
-    "category": "productivity",
-    "tags": [
-      "reading",
-      "summary",
-      "web"
-    ],
-    "path": "skills/en/reading-summary.json",
-    "release": {
-      "status": "published",
-      "review": "approved"
-    }
-  },
-  {
-    "id": "strategy-trading",
-    "lang": "en",
-    "version": "1.0.1",
-    "name": {
-      "cn": "策略交易",
-      "en": "Strategy Trading"
-    },
-    "description": {
-      "cn": "把交易想法转成可执行策略、风险约束和下单计划；连接真实券商工具后可进行受控实盘执行。",
-      "en": "Turn a trading idea into an executable strategy, risk policy, and order plan; connect a live broker tool for controlled production execution."
-    },
-    "category": "finance",
-    "tags": [
-      "trading",
-      "strategy",
-      "execution",
-      "risk",
-      "automation"
-    ],
-    "path": "skills/en/strategy-trading.json",
+    "path": "skills/chat/web-research/cn.json",
     "release": {
       "status": "published",
       "review": "approved"

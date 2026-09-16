@@ -1,5 +1,7 @@
 # Skill Package Spec
 
+本文描述 Chat Marketplace 的用户技能包 JSON 格式，适用于 `skills/chat/<skill-id>/<lang>.json`。`<lang>` 当前支持 `cn` 和 `en`，文件中的 `id` 必须和父目录 `<skill-id>` 一致。Codex 执行类技能使用 `skills/codex/<skill-id>/SKILL.md` 目录结构，不进入本规范和 Chat `packages.json`，见 [Codex 执行类技能](./CODEX_SKILLS.md)。
+
 ## Required Fields
 
 - `schemaVersion`: current value is `1.0`
