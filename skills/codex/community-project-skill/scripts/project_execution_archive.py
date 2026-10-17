@@ -123,6 +123,19 @@ def render_content(value: Any) -> str:
     return "```json\n" + json.dumps(value, ensure_ascii=False, indent=2) + "\n```"
 
 
+def render_collapsed(label: str, value: Any) -> list[str]:
+    """Keep the archive index readable while preserving every captured record."""
+    return [
+        "<details>",
+        f"<summary>{label}</summary>",
+        "",
+        render_content(value),
+        "",
+        "</details>",
+        "",
+    ]
+
+
 def render_markdown(state: dict[str, Any]) -> str:
     lines = [
         f"# Project 任务执行归档",
@@ -141,6 +154,8 @@ def render_markdown(state: dict[str, Any]) -> str:
         f"- complete: `{str(state.get('complete', False)).lower()}`",
         f"- missing: `{', '.join(state.get('missing', [])) or 'none'}`",
         "",
+        f"- captured records: `{len(state.get('records', []))}` (原始记录默认折叠，JSON transcript 保留脱敏详情)",
+        "",
     ]
     if state.get("summary"):
         lines += ["## Summary", "", str(state["summary"]), ""]
@@ -151,10 +166,12 @@ def render_markdown(state: dict[str, Any]) -> str:
     for section, label in (("repository", "Repository"), ("commits", "Commits"), ("pull_requests", "Pull Requests"), ("verification", "Verification")):
         if state.get(section):
             lines += [f"## {label}", "", render_content(state[section]), ""]
-    lines += ["## Records", ""]
+    lines += ["## Records", "", "原始事件按条目折叠，先阅读摘要，需要审计时再展开。", ""]
     for index, record in enumerate(state.get("records", []), 1):
         role = record.get("role") or record.get("kind") or "event"
-        lines += [f"### {index}. {role}", "", render_content(record.get("content", record)), ""]
+        kind = record.get("kind") or "message"
+        lines += [f"### {index}. {role} / {kind}", ""]
+        lines += render_collapsed("查看原始记录", record.get("content", record))
     if state.get("attachments"):
         lines += ["## Attachment References", ""]
         for attachment in state["attachments"]:

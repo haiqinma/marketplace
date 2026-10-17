@@ -6,14 +6,15 @@
 
 阶段必须按顺序推进，不能跳过门禁：
 
-| 阶段 | 必须形成的输入/输出 | 进入下一阶段的条件 |
+| 阶段/门禁产物 | 必须形成的输入/输出 | 进入下一阶段的条件 |
 | --- | --- | --- |
 | `intake` | 用户请求、任务标题、范围初稿 | 任务已创建并绑定工作区 |
 | `analysis` | 需求理解、现状证据、范围/非目标、约束和风险 | 分析记录已写入任务或生命周期文件 |
 | `solution` | 至少一种可行方案、方案对比、推荐方案、验收标准、测试计划 | 方案记录已写入 |
 | `approval` | 负责人确认、确认人和可追溯引用 | 方案确认已记录 |
 | `implementation` | 修改文件、关键决策、实现过程 | 已完成获批方案的实现 |
-| `verification` | 命令、结果、时间、环境、失败信息 | `passed=true`，且覆盖任务验收标准 |
+| 文档收口记录（`documentation`） | 检查/更新的 `docs`、`books/yeying` 路径、无需更新理由、跨项目影响 | 在 `implementation` 完成后、`verification` 前记录；PlantUML 仅在复杂流程需要时记录 |
+| `verification` | 命令、结果、时间、环境、失败信息 | `passed=true`，且覆盖任务验收标准和文档收口 |
 | `delivery` | 分支、commit SHA、仓库、PR URL/编号 | PR 已创建或复用，状态和 CI 信息已记录 |
 | `audit` | 执行归档、脱敏状态、缺失项、审计索引 | 归档已发布到任务附件并可复用 |
 | `completed` | 最终结果、合并状态或明确阻塞 | PR、验证和归档记录完整 |
@@ -46,12 +47,15 @@ python3 scripts/project_lifecycle.py record --state .project-lifecycle.json \
   --config ~/.yeying/skills/project/config.toml
 python3 scripts/project_lifecycle.py record --state .project-lifecycle.json \
   --kind solution --file /tmp/solution.json --publish
+python3 scripts/project_lifecycle.py record --state .project-lifecycle.json \
+  --kind documentation --file /tmp/documentation.json --publish
 ```
 
 建议字段：
 
 - `analysis`：`understanding`、`in_scope`、`out_of_scope`、`evidence`、`constraints`、`risks`；
 - `solution`：`options`、`comparison`、`recommendation`、`acceptance_criteria`、`test_plan`；
+- `documentation`：`paths`、`status`、`updated`、`no_update_reason`、`cross_project_impact`；
 - `verification`：`commands`、`environment`、`passed`、`results`、`failures`；
 - `pull_request`：`repository`、`branch`、`commit_sha`、`url`、`number`、`state`、`ci`、`review`、`merged_at`；
 - `execution_archive`：`execution_id`、`manifest_sha256`、`complete`、`missing`、`published_at`。
@@ -78,6 +82,44 @@ python3 scripts/project_lifecycle.py advance --state .project-lifecycle.json --t
 ```
 
 `github-api-push` 负责把本地 commit 推到 GitHub、查找或创建 PR；完成后将同一组 `repository`、`branch`、`commit_sha` 和 `url` 写入 `pull_request` 产物。Project Skill 不复制 GitHub API，也不把“已提交本地 commit”误报为“已创建 PR”。
+
+## 方案确认与等待
+
+方案发布后，如果需要负责人确认，Agent 结束当前生成回合即可。等待不是后台驻留状态：skill 不轮询 Project、不发送心跳、也不定时唤醒模型，因此不会自行产生新的模型调用。用户后续回复后，宿主启动新回合，Agent 必须重新读取任务讨论：明确批准则记录确认引用，提出修改则保留旧方案并记录新方案，拒绝则记录决定并停止。宿主的订阅或 token 计费规则不由 skill 定义。
+
+## 流程图（复杂任务可选）
+
+简单任务使用阶段表即可；只有分支多、回退或跨项目影响明显时才附 PlantUML：
+
+```plantuml
+start
+:读取任务并绑定工作区;
+:记录分析与方案;
+:发布方案;
+stop
+
+' 用户回复后由宿主启动新回合
+start
+:重读最新讨论;
+if (批准?) then (是)
+  :记录确认引用;
+  :实施;
+  :记录 docs/books 文档收口;
+  :验证;
+  if (通过?) then (是)
+    :交付 PR;
+    :发布脱敏归档;
+  else (否)
+    :回退 implementation 并记录失败;
+  endif
+elseif (修改) then (是)
+  :保留旧方案并修订;
+else (拒绝)
+  :记录决定并停止;
+endif
+stop
+@enduml
+```
 
 ## 执行会话与审计
 
@@ -107,6 +149,7 @@ python3 scripts/project_lifecycle.py archive-link \
 ## 失败、阻塞和重试
 
 - 分析或方案不完整时停在对应阶段，不直接编码；
+- 文档收口记录未形成时停在 `implementation`，不能进入 `verification`；它是验证前门禁，不单独增加状态迁移；
 - 负责人拒绝方案时保留原方案记录，新增决策记录，不覆盖历史事实；
 - 验证失败时记录命令和失败输出，使用允许的回退路径回到 `implementation`，不能推进 `delivery`；
 - PR 或 CI 阻塞时记录阻塞原因和下一步，不能标记 `completed`；

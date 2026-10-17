@@ -55,6 +55,9 @@ class LifecycleTest(unittest.TestCase):
                 lifecycle.advance(state, "implementation")
             state["approval"] = {"by": "owner", "reference": "comment:1"}
             lifecycle.advance(state, "implementation")
+            self.record(state, "implementation", {
+                "files": ["skill"], "decisions": ["保留 JSON 原始记录"], "status": "done",
+            }, root)
             self.record(state, "verification", {
                 "commands": ["test"],
                 "environment": "local",
@@ -66,6 +69,46 @@ class LifecycleTest(unittest.TestCase):
             state["stage"] = "verification"
             lifecycle.advance(state, "implementation")
             self.assertTrue(state["history"][-1]["rollback"])
+
+    def test_verification_requires_documentation_record(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            state = self.state()
+            state["stage"] = "implementation"
+            self.record(state, "implementation", {
+                "files": ["skill"], "decisions": [], "status": "done",
+            }, root)
+            self.record(state, "verification", {
+                "commands": ["test"], "environment": "local", "passed": True, "results": "ok",
+            }, root)
+            with self.assertRaisesRegex(lifecycle.ProjectApiError, "documentation"):
+                lifecycle.advance(state, "verification")
+
+            self.record(state, "documentation", {
+                "paths": ["docs/README.md", "books/yeying"],
+                "status": "checked",
+                "updated": False,
+                "no_update_reason": "本次实现不改变用户可见流程",
+                "cross_project_impact": "无",
+            }, root)
+            lifecycle.advance(state, "verification")
+            self.assertEqual(state["stage"], "verification")
+
+    def test_record_comment_summarizes_and_collapses_raw_data(self):
+        state = self.state()
+        record = {
+            "kind": "documentation",
+            "recorded_at": "2026-01-01T00:00:00Z",
+            "sha256": "a" * 64,
+            "data": {
+                "paths": ["docs"], "status": "checked", "updated": True,
+                "no_update_reason": "", "cross_project_impact": "无",
+            },
+        }
+        rendered = lifecycle.render_record_comment(state, record)
+        self.assertIn("文档收口", rendered)
+        self.assertIn("<details>", rendered)
+        self.assertIn("查看结构化原始记录", rendered)
 
     def test_record_requires_contract_fields_and_is_idempotent(self):
         with tempfile.TemporaryDirectory() as tmp:

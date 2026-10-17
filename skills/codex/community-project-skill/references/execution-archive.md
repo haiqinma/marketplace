@@ -38,7 +38,9 @@ transcript.json
 manifest.json
 ```
 
-`manifest.json` 记录 `projectId`、`taskId`、`executionId`、来源工具、模型、起止时间、记录数量、完整性、缺失项、脱敏标记、生命周期阶段和 transcript 文件的 SHA-256。若提供生命周期快照，还会记录其摘要哈希；快照中的仓库、commit、PR、验证结果会进入结构化 transcript。Manifest 不记录自己的 SHA-256，因为文件不能包含自身最终内容的哈希。
+`manifest.json` 记录 `projectId`、`taskId`、`executionId`、来源工具、模型、起止时间、记录数量、完整性、缺失项、脱敏标记、生命周期阶段和 transcript 文件的 SHA-256。若提供生命周期快照，还会记录其摘要哈希；快照中的仓库、commit、PR、验证结果和文档收口记录会进入结构化 transcript。Manifest 不记录自己的 SHA-256，因为文件不能包含自身最终内容的哈希。
+
+`transcript.md` 是面向任务成员的阅读入口：先展示状态、完整性、摘要、结果、生命周期、验证和附件索引；每条原始事件放在 `<details>` 折叠块中。`transcript.json` 保留宿主实际提供的全部脱敏结构化记录，供审计和机器处理。摘要不等于删减原始资料，缺失上下文仍必须在首屏列出。
 
 当宿主环境无法提供隐藏上下文、完整工具结果或附件时，必须使用 `--incomplete --missing "..."`，不能把可见记录宣称为平台底层的完整审计日志。
 

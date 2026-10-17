@@ -7,7 +7,7 @@ description: Manage YeYing Project development tasks across intake, analysis, so
 
 Use the bundled client to treat Project as the source of truth for task context and lifecycle decisions, the local repository as the code source, and GitHub as the PR delivery source. Never place AK/SK credentials in a repository, command output, task comment, archive, or final response.
 
-The standard lifecycle is documented in [references/lifecycle.md](references/lifecycle.md). Do not start implementation before the task has a recorded analysis, a feasible solution, acceptance criteria, and explicit approval. Do not mark work complete before verification, PR metadata, and the execution archive are associated with the same task.
+The standard lifecycle is documented in [references/lifecycle.md](references/lifecycle.md). Do not start implementation before the task has a recorded analysis, a feasible solution, acceptance criteria, and explicit approval. Before verification, record the documentation closeout for local `docs` and `books/yeying`: updated, checked with no change needed (with reason), and any cross-project impact. Do not mark work complete before verification, PR metadata, and the execution archive are associated with the same task.
 
 For work performed by Codex, Claude, or another Agent on a specific task, use the independent execution archive workflow in [references/execution-archive.md](references/execution-archive.md). It records the available execution history, publishes the archive as task attachments, and writes one idempotent task reference. This workflow belongs to Project and does not require or call `community-warehouse-skill`.
 
@@ -67,6 +67,7 @@ python3 scripts/project_api.py download --file-id 456 --output /tmp/document.pdf
 # lifecycle state and gates
 python3 scripts/project_lifecycle.py bind --project-id 8 --task-id 123 --workdir /path/to/repository
 python3 scripts/project_lifecycle.py record --state /path/to/repository/.project-lifecycle.json --kind analysis --file /tmp/analysis.json --publish
+python3 scripts/project_lifecycle.py record --state /path/to/repository/.project-lifecycle.json --kind documentation --file /tmp/documentation.json --publish
 python3 scripts/project_lifecycle.py approve --state /path/to/repository/.project-lifecycle.json --by "负责人" --reference "Project 评论或会议记录引用"
 python3 scripts/project_lifecycle.py archive-link --state /path/to/repository/.project-lifecycle.json --manifest /tmp/execution/manifest.json --publish
 python3 scripts/project_lifecycle.py advance --state /path/to/repository/.project-lifecycle.json --to implementation
@@ -133,11 +134,12 @@ All successful commands print JSON to stdout. Failures print a concise error to 
 2. Bind the repository with `project_lifecycle.py bind` or create-and-bind it with `project_lifecycle.py create`; keep `.project-task.json` and `.project-lifecycle.json` out of Git.
 3. Read the task title, description, content, members, tags, and recent discussion. Record the analysis and feasible solution, including scope, non-goals, risks, acceptance criteria, and test plan.
 4. Obtain explicit solution approval and advance the lifecycle gate before changing code. A verbal or hidden approval that has no traceable reference does not satisfy the gate.
-5. Inspect the local repository and perform the requested work using its own instructions and quality gates. Keep structured implementation and verification records in the lifecycle state.
-6. Run verification and record `passed=true` only when the acceptance criteria are covered. Use `github-api-push` for GitHub push/PR operations, then record the exact repository, branch, commit SHA, PR URL/number, CI and review state in a `pull_request` record.
-7. Capture and publish the available AI execution history with the same task and `executionId`; associate the lifecycle snapshot with `project_execution_archive.py finalize`.
-8. Advance to `completed` only after the PR, verification and audit archive are all present. Post a concise durable result comment; do not post routine tool narration.
-9. Keep the user's chat response aligned with what was written back to Project.
+5. Inspect the local repository and perform the requested work using its own instructions and quality gates. Keep structured implementation records in the lifecycle state.
+6. Before verification, inspect and update affected local `docs` and `books/yeying` documents. Record the paths, update status, no-change reason when applicable, and cross-project impact as a `documentation` record. PlantUML is optional and should be used only when it makes a complex flow easier to read.
+7. Run verification and record `passed=true` only when the acceptance criteria and documentation closeout are covered. Use `github-api-push` for GitHub push/PR operations, then record the exact repository, branch, commit SHA, PR URL/number, CI and review state in a `pull_request` record.
+8. Capture and publish the available AI execution history with the same task and `executionId`; associate the lifecycle snapshot with `project_execution_archive.py finalize`.
+9. Advance to `completed` only after the PR, verification and audit archive are all present. Post a concise durable result comment; do not post routine tool narration.
+10. Keep the user's chat response aligned with what was written back to Project.
 
 ## Task Execution Archive
 
@@ -150,6 +152,8 @@ Claude Code hook payloads can be translated with `scripts/project_claude_hook.py
 The capture bridge can discover `project_id` and `task_id` from explicit arguments, `YEYING_PROJECT_ID`/`YEYING_PROJECT_TASK_ID`, or the nearest `.project-task.json`. It fails closed when the binding is incomplete.
 
 For one-event-at-a-time Claude hooks, use `scripts/project_execution_event.py` as described in [references/claude-hooks.md](references/claude-hooks.md). It persists each event before the next hook starts and only finalizes on an explicit stop/session-end hook.
+
+When a solution needs human confirmation, publish the solution and end the current generation turn. Do not poll, heartbeat, or schedule model calls while waiting. On a later user turn, re-read the task discussion and either record approval, revise the solution, or record rejection. This skill does not determine the host's subscription or token billing rules.
 
 ## File Cabinet Workflow
 
@@ -206,6 +210,7 @@ See [references/document-sync.md](references/document-sync.md) for the JSON conf
 
 - Write comments in the user's language unless the task establishes another language.
 - Keep comments factual and compact. Prefer a short heading followed by flat bullets.
+- Put the decision, current stage, next step, verification state, and missing items before large raw records. Wrap raw JSON or tool output in `<details>` when the Project Markdown renderer supports it; never remove the redacted source record.
 - For multiline comments, use `--content-file` and write real line breaks. The client also normalizes literal `\\n` sequences from agent command invocations.
 - Task details use the Project rich-text HTML contract. Pass Markdown through `update --content` or `update --content-file`; the client converts headings, lists, inline code, emphasis, and HTTP(S) links to editor HTML. Use `--content-format html` only when the input is already Project editor HTML.
 - Do not expose secrets, local environment variables, private filesystem paths, or unrelated repository state.

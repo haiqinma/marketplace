@@ -66,12 +66,14 @@ community-<scope>-skill
 
 | Skill | 用途 |
 | --- | --- |
-| `community-project-skill` | 通过 Project 标准 API 管理研发任务生命周期、归档 AI 执行并同步文件柜文档 |
+| `community-project-skill` | 通过 Project 标准 API 管理研发任务生命周期、文档收口、摘要归档并同步文件柜文档 |
 | `community-warehouse-skill` | 按统一契约推进 Warehouse Tool 化、MCP 接入和 Agent 编排 |
 
 ## 维护规则
 
 - 技能说明必须聚焦实际任务，不写泛化人格设定。
+- Project 研发任务必须在验证前记录本地 `docs` 和 `books/yeying` 的文档检查结果；复杂流程才使用 PlantUML，简单流程用阶段表即可。
+- 执行归档的 Markdown 是摘要优先的阅读入口，原始脱敏事件保留在折叠内容和 `transcript.json`，不得为了可读性删除审计资料。
 - 不在技能中硬编码本地绝对路径、AK/SK、Token、Cookie、私有地址或生产密钥。
 - 涉及外部写操作时，技能只定义边界和检查项，不替代用户授权。
 - 涉及社区产品边界时，必须区分当前已实现能力、规划能力和历史兼容命名。

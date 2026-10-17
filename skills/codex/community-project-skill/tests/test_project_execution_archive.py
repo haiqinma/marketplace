@@ -50,6 +50,10 @@ class ExecutionArchiveTest(unittest.TestCase):
             }
             state = archive.finalize_state(state, archive_dir)
             archive.write_json(state_path, state)
+            transcript_md = (archive_dir / "transcript.md").read_text(encoding="utf-8")
+            self.assertIn("原始记录默认折叠", transcript_md)
+            self.assertIn("<details>", transcript_md)
+            self.assertNotIn('details open', transcript_md)
             transcript = (archive_dir / "transcript.json").read_text(encoding="utf-8")
             self.assertNotIn("secret", transcript)
             self.assertIn("[REDACTED]", transcript)

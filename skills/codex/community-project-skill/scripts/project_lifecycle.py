@@ -32,6 +32,7 @@ RECORD_KINDS = (
     "solution",
     "decision",
     "implementation",
+    "documentation",
     "verification",
     "pull_request",
     "review",
@@ -40,6 +41,7 @@ RECORD_KINDS = (
 REQUIRED_FIELDS: dict[str, tuple[str, ...]] = {
     "analysis": ("understanding", "in_scope", "out_of_scope", "evidence", "constraints", "risks"),
     "solution": ("options", "comparison", "recommendation", "acceptance_criteria", "test_plan"),
+    "documentation": ("paths", "status", "updated", "no_update_reason", "cross_project_impact"),
     "verification": ("commands", "environment", "passed", "results"),
     "pull_request": ("repository", "branch", "commit_sha", "url"),
     "execution_archive": ("execution_id", "complete", "published_at"),
@@ -207,6 +209,13 @@ def advance(state: dict[str, Any], target: str) -> None:
         raise ProjectApiError(f"进入 {target} 前必须记录 {record_kind} 产物")
     if target == "implementation" and not state.get("approval"):
         raise ProjectApiError("进入 implementation 前必须记录人工方案确认")
+    if target == "verification":
+        implementation = record_for(state, "implementation")
+        documentation = record_for(state, "documentation")
+        if not implementation:
+            raise ProjectApiError("进入 verification 前必须记录 implementation 产物")
+        if not documentation:
+            raise ProjectApiError("进入 verification 前必须记录 documentation 产物")
     if target == "delivery":
         verification = record_for(state, "verification")
         if not verification or verification["data"].get("passed") is not True:
@@ -223,14 +232,35 @@ def advance(state: dict[str, Any], target: str) -> None:
 
 def render_record_comment(state: dict[str, Any], record: dict[str, Any]) -> str:
     marker = f"[lifecycle:{state['task_id']}:{record['kind']}:{record['sha256'][:16]}]"
+    data = record["data"]
+    summary = record_summary(record["kind"], data)
     return (
         f"{marker} 研发流程记录：{record['kind']}\n\n"
         f"阶段：{state['stage']}\n"
         f"记录时间：{record['recorded_at']}\n\n"
+        f"{summary}\n\n"
+        "<details>\n<summary>查看结构化原始记录</summary>\n\n"
         "```json\n"
-        + json.dumps(record["data"], ensure_ascii=False, indent=2)
-        + "\n```"
+        + json.dumps(data, ensure_ascii=False, indent=2)
+        + "\n```\n\n</details>"
     )
+
+
+def record_summary(kind: str, data: dict[str, Any]) -> str:
+    """Render a compact, scannable task update without hiding its raw record."""
+    if kind == "analysis":
+        return f"**需求理解**：{data.get('understanding', '')}\n\n**范围**：{len(data.get('in_scope', []))} 项；**风险**：{len(data.get('risks', []))} 项。"
+    if kind == "solution":
+        return f"**推荐方案**：{data.get('recommendation', '')}\n\n**验收标准**：{len(data.get('acceptance_criteria', []))} 项；**测试计划**：{len(data.get('test_plan', []))} 项。"
+    if kind == "documentation":
+        return f"**文档收口**：{data.get('status', '')}\n\n**检查路径**：{len(data.get('paths', []))} 个；**跨项目影响**：{data.get('cross_project_impact', '')}"
+    if kind == "verification":
+        return f"**验证结果**：{'通过' if data.get('passed') is True else '未通过'}\n\n**环境**：{data.get('environment', '')}"
+    if kind == "pull_request":
+        return f"**交付**：[{data.get('branch', '')}]({data.get('url', '')})\n\n**Commit**：`{data.get('commit_sha', '')}`"
+    if kind == "execution_archive":
+        return f"**执行归档**：`{data.get('execution_id', '')}`，完整：`{str(data.get('complete', False)).lower()}`"
+    return f"**记录类型**：`{kind}`"
 
 
 def publish_record(state: dict[str, Any], record: dict[str, Any], config_path: str | Path | None = None) -> bool:
