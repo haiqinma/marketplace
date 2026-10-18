@@ -14,6 +14,23 @@
   "tags": ["official", "web", "http"],
   "command": "uvx",
   "baseArgs": ["mcp-server-fetch"],
+  "runtimes": ["standalone", "desktop"],
+  "platforms": ["macos", "windows", "linux"],
+  "permissions": [
+    {
+      "id": "network",
+      "description": {
+        "cn": "访问用户请求的网页并读取其内容。",
+        "en": "Access requested webpages and read their contents."
+      }
+    }
+  ],
+  "requirements": [
+    {
+      "cn": "需要已安装 Python 和可用的 uvx 命令。",
+      "en": "Requires Python and the uvx command to be available."
+    }
+  ],
   "configurable": false,
   "release": {
     "status": "published",

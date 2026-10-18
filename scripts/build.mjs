@@ -60,6 +60,50 @@ function validateToolServer(server, file) {
   assert(typeof server.command === "string" && server.command, `${file}: command is required`);
   assert(Array.isArray(server.baseArgs), `${file}: baseArgs must be an array`);
   assert(typeof server.configurable === "boolean", `${file}: configurable must be a boolean`);
+  if (server.runtimes !== undefined) {
+    assert(
+      Array.isArray(server.runtimes) &&
+        server.runtimes.length > 0 &&
+        server.runtimes.every((runtime) => ["standalone", "desktop"].includes(runtime)),
+      `${file}: runtimes must contain standalone and/or desktop`,
+    );
+  }
+  if (server.platforms !== undefined) {
+    assert(
+      Array.isArray(server.platforms) &&
+        server.platforms.length > 0 &&
+        server.platforms.every((platform) => ["macos", "windows", "linux"].includes(platform)),
+      `${file}: platforms must contain supported platform ids`,
+    );
+  }
+  if (server.permissions !== undefined) {
+    assert(
+      Array.isArray(server.permissions) &&
+        server.permissions.every(
+          (permission) =>
+            typeof permission?.id === "string" &&
+            permission.id.length > 0 &&
+            isLocalizedText(permission.description),
+        ),
+      `${file}: permissions must declare an id and localized description`,
+    );
+  }
+  if (server.requirements !== undefined) {
+    assert(
+      Array.isArray(server.requirements) && server.requirements.every(isLocalizedText),
+      `${file}: requirements must be localized text entries`,
+    );
+  }
+  if (server.configSchema?.properties) {
+    Object.entries(server.configSchema.properties).forEach(([key, property]) => {
+      if (property && property.sensitive !== undefined) {
+        assert(
+          typeof property.sensitive === "boolean",
+          `${file}: configSchema.properties.${key}.sensitive must be boolean`,
+        );
+      }
+    });
+  }
   assert(server.release?.status !== "removed", `${file}: removed tool servers should not be committed`);
 }
 

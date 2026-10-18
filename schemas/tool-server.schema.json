@@ -58,12 +58,50 @@
       "type": "object",
       "properties": {
         "properties": {
-          "type": "object"
+          "type": "object",
+          "additionalProperties": {
+            "type": "object",
+            "properties": {
+              "sensitive": { "type": "boolean" }
+            }
+          }
         }
       }
     },
     "argsMapping": {
       "type": "object"
+    },
+    "runtimes": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {
+        "enum": ["standalone", "desktop"]
+      }
+    },
+    "platforms": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {
+        "enum": ["macos", "windows", "linux"]
+      }
+    },
+    "permissions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "description"],
+        "properties": {
+          "id": { "type": "string" },
+          "description": { "$ref": "#/$defs/localizedText" }
+        },
+        "additionalProperties": false
+      }
+    },
+    "requirements": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/localizedText" }
     },
     "release": {
       "type": "object",

@@ -24,6 +24,30 @@
       "--transport",
       "stdio"
     ],
+    "runtimes": [
+      "standalone",
+      "desktop"
+    ],
+    "platforms": [
+      "macos",
+      "windows",
+      "linux"
+    ],
+    "permissions": [
+      {
+        "id": "network",
+        "description": {
+          "cn": "访问 Brave Search API 获取网页搜索结果。",
+          "en": "Access the Brave Search API for web search results."
+        }
+      }
+    ],
+    "requirements": [
+      {
+        "cn": "需要已安装 Node.js 和可用的 npx 命令。",
+        "en": "Requires Node.js and the npx command to be available."
+      }
+    ],
     "configurable": true,
     "configSchema": {
       "properties": {
@@ -34,6 +58,7 @@
             "en": "Brave Search API Key."
           },
           "required": true,
+          "sensitive": true,
           "helpUrl": "https://api-dashboard.search.brave.com/login",
           "helpLabel": {
             "cn": "获取 API Key",
@@ -75,6 +100,30 @@
     "baseArgs": [
       "mcp-server-fetch"
     ],
+    "runtimes": [
+      "standalone",
+      "desktop"
+    ],
+    "platforms": [
+      "macos",
+      "windows",
+      "linux"
+    ],
+    "permissions": [
+      {
+        "id": "network",
+        "description": {
+          "cn": "访问用户请求的网页并读取其内容。",
+          "en": "Access requested webpages and read their contents."
+        }
+      }
+    ],
+    "requirements": [
+      {
+        "cn": "需要已安装 Python 和可用的 uvx 命令。",
+        "en": "Requires Python and the uvx command to be available."
+      }
+    ],
     "configurable": false,
     "release": {
       "status": "published",
@@ -109,6 +158,37 @@
       "--transport",
       "stdio"
     ],
+    "runtimes": [
+      "standalone",
+      "desktop"
+    ],
+    "platforms": [
+      "macos",
+      "windows",
+      "linux"
+    ],
+    "permissions": [
+      {
+        "id": "network",
+        "description": {
+          "cn": "连接 iFinD / QuantAPI 服务读取行情数据。",
+          "en": "Connect to iFinD / QuantAPI services to read market data."
+        }
+      },
+      {
+        "id": "account-token",
+        "description": {
+          "cn": "使用你提供的 iFinD API Token。",
+          "en": "Use the iFinD API token you provide."
+        }
+      }
+    ],
+    "requirements": [
+      {
+        "cn": "需要已安装 Node.js 和可用的 npx 命令。",
+        "en": "Requires Node.js and the npx command to be available."
+      }
+    ],
     "configurable": true,
     "configSchema": {
       "properties": {
@@ -119,6 +199,7 @@
             "en": "iFinD / QuantAPI refresh_token. Used to obtain access_token."
           },
           "required": true,
+          "sensitive": true,
           "helpUrl": "https://quantapi.10jqka.com.cn/gwstatic/static/ds_web/super-command-web/index.html#/AccountDetails",
           "helpLabel": {
             "cn": "获取 refresh_token",
@@ -131,7 +212,8 @@
             "cn": "可选的已有 access_token；不填写时使用 refreshToken 自动获取。",
             "en": "Optional existing access_token. If omitted, refreshToken is used."
           },
-          "required": false
+          "required": false,
+          "sensitive": true
         },
         "baseUrl": {
           "type": "string",
@@ -200,6 +282,30 @@
       "@yeying-community/paper-broker-mcp",
       "--transport",
       "stdio"
+    ],
+    "runtimes": [
+      "standalone",
+      "desktop"
+    ],
+    "platforms": [
+      "macos",
+      "windows",
+      "linux"
+    ],
+    "permissions": [
+      {
+        "id": "local-data",
+        "description": {
+          "cn": "在本机保存模拟账户和交易记录。",
+          "en": "Store paper trading accounts and records on this device."
+        }
+      }
+    ],
+    "requirements": [
+      {
+        "cn": "需要已安装 Node.js 和可用的 npx 命令。",
+        "en": "Requires Node.js and the npx command to be available."
+      }
     ],
     "configurable": true,
     "configSchema": {
@@ -301,6 +407,28 @@
       "--transport",
       "stdio"
     ],
+    "runtimes": [
+      "standalone",
+      "desktop"
+    ],
+    "platforms": [
+      "windows"
+    ],
+    "permissions": [
+      {
+        "id": "local-trading",
+        "description": {
+          "cn": "访问本机 MiniQMT 与 xtquant；若启用实盘配置，可能提交真实交易订单。",
+          "en": "Access local MiniQMT and xtquant; live-trading settings may submit real orders."
+        }
+      }
+    ],
+    "requirements": [
+      {
+        "cn": "仅支持 Windows；需要 Node.js、MiniQMT 和 xtquant。",
+        "en": "Windows only; requires Node.js, MiniQMT, and xtquant."
+      }
+    ],
     "configurable": true,
     "configSchema": {
       "properties": {
@@ -310,7 +438,8 @@
             "cn": "MiniQMT userdata_mini 路径，例如 D:\\QMT\\userdata_mini。",
             "en": "MiniQMT userdata_mini path, for example D:\\QMT\\userdata_mini."
           },
-          "required": true
+          "required": true,
+          "sensitive": true
         },
         "accountId": {
           "type": "string",
