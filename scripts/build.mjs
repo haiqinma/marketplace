@@ -88,6 +88,14 @@ function validateSkillReadme(skillFolder) {
     `${chineseRelative}: README_CN.md must contain Chinese content`,
   );
   assert(
+    /^### Configuration\s*$/m.test(english),
+    `${englishRelative}: README.md must contain a Configuration section`,
+  );
+  assert(
+    /^### 配置\s*$/m.test(chinese),
+    `${chineseRelative}: README_CN.md must contain a 配置 section`,
+  );
+  assert(
     /\(README_CN\.md\)/.test(english),
     `${englishRelative}: README.md must link to README_CN.md`,
   );

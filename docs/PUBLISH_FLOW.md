@@ -44,7 +44,7 @@ cp templates/skill.json skills/<skill-id>/cn.json
 
 编辑技能包时重点填写：
 
-- `README.md` 和 `README_CN.md`：分别提供英文和中文说明，描述一致的用途、能力和边界，并在顶部互相链接
+- `README.md` 和 `README_CN.md`：分别提供英文和中文说明，描述一致的用途、能力、配置和边界，并在顶部互相链接；配置章节要写明文件路径、优先级、字段、默认值、运行依赖和凭证获取入口
 - `id`：稳定 ID，使用 kebab-case，例如 `web-research`；必须和父目录 `skills/<skill-id>/` 中的 `<skill-id>` 一致
 - 文件路径：必须放在 `skills/<skill-id>/<lang>.json`，`<lang>` 当前支持 `cn` 和 `en`
 - `name`：用户看到的名称，必须清晰、聚焦；推荐使用 `{ "cn": "...", "en": "..." }`

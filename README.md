@@ -65,7 +65,7 @@ scripts/
   build.mjs              校验并生成技能和工具发布清单
 ```
 
-当前 `scripts/build.mjs` 扫描 `skills/<skill-id>/`：校验每个 Skill 都有英文 `README.md` 和中文 `README_CN.md`，并且两份文档互相链接；校验 Chat 和 Agent 两种入口，只把 `cn.json`/`en.json` 写入 Chat 发布清单；同时处理 `tools/servers/` 下的 Tool Server 包。`providers/` 后续应增加对应 schema 和发布清单生成逻辑。
+当前 `scripts/build.mjs` 扫描 `skills/<skill-id>/`：校验每个 Skill 都有英文 `README.md` 和中文 `README_CN.md`，两份文档互相链接并包含配置章节；校验 Chat 和 Agent 两种入口，只把 `cn.json`/`en.json` 写入 Chat 发布清单；同时处理 `tools/servers/` 下的 Tool Server 包。`providers/` 后续应增加对应 schema 和发布清单生成逻辑。
 
 ## 添加技能
 

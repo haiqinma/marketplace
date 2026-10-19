@@ -62,7 +62,7 @@ Example:
 
 ## Review Rules
 
-- Every Skill must include an English `README.md` and a Chinese `README_CN.md` with equivalent information and reciprocal links.
+- Every Skill must include an English `README.md` and a Chinese `README_CN.md` with equivalent information, reciprocal links, and detailed configuration sections. Document configuration files, precedence, fields, defaults, runtime dependencies, and where credentials are obtained; explicitly state when no standalone configuration file exists.
 - Skills must describe a concrete task, not a vague assistant persona.
 - Dependencies must be explicit.
 - API keys, tokens, private URLs, and local file paths are forbidden.

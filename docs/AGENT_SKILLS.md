@@ -27,7 +27,7 @@ skills/<skill-id>/
   assets/
 ```
 
-`README.md`、`README_CN.md` 和 `SKILL.md` 是必需文件。`README.md` 面向英文开发者，`README_CN.md` 面向中文开发者，两份文档应描述一致的用途、能力和边界，并在顶部互相链接；`SKILL.md` 是 Agent 运行时入口，应保持聚焦，不为了双语展示重复整份运行指令。`references/`、`scripts/` 和 `assets/` 只在确有复用价值时增加。
+`README.md`、`README_CN.md` 和 `SKILL.md` 是必需文件。`README.md` 面向英文开发者，`README_CN.md` 面向中文开发者，两份文档应描述一致的用途、能力、配置和边界，并在顶部互相链接。配置章节必须说明配置文件、解析优先级、字段、默认值、运行依赖和凭证获取入口；没有独立配置文件时也必须明确说明。`SKILL.md` 是 Agent 运行时入口，应保持聚焦，不为了双语展示重复整份运行指令。`references/`、`scripts/` 和 `assets/` 只在确有复用价值时增加。
 
 ## 命名模板
 
@@ -76,7 +76,7 @@ yeying-<scope>
 
 ## 维护规则
 
-- 每个 Skill 必须分别提供英文 `README.md` 和中文 `README_CN.md`，两份文档应描述一致的用途、能力和边界。
+- 每个 Skill 必须分别提供英文 `README.md` 和中文 `README_CN.md`，两份文档应描述一致的用途、能力、配置和边界。
 - 技能说明必须聚焦实际任务，不写泛化人格设定。
 - Project 研发任务必须在验证前记录本地 `docs` 和 `books/yeying` 的文档检查结果；复杂流程才使用 PlantUML，简单流程用阶段表即可。
 - 执行归档的 Markdown 是摘要优先的阅读入口，原始脱敏事件保留在折叠内容和 `transcript.json`，不得为了可读性删除审计资料。
