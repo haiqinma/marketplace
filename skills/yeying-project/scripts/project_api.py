@@ -150,7 +150,7 @@ def request_api(
         "X-YY-Timestamp": timestamp,
         "X-YY-Nonce": nonce,
         "X-YY-Signature": signature,
-        "User-Agent": "yeying-community-project-skill/1.0",
+        "User-Agent": "yeying-project/1.0",
     }
     request = urllib.request.Request(url, data=body if method != "GET" else None, headers=headers, method=method)
     try:
@@ -221,7 +221,7 @@ def request_upload(
         "X-YY-Timestamp": timestamp,
         "X-YY-Nonce": nonce,
         "X-YY-Signature": signature,
-        "User-Agent": "yeying-community-project-skill/1.0",
+        "User-Agent": "yeying-project/1.0",
     }
     request = urllib.request.Request(url, data=body, headers=headers, method="POST")
     try:

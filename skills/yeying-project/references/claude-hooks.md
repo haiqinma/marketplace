@@ -6,7 +6,7 @@ Claude Code Hook 每次以 JSON 通过 stdin 调用命令。把适配器和单�
 
 ```bash
 PROJECT_ROOT=/workspace/project
-SKILL=/path/to/community-project-skill
+SKILL=/path/to/yeying-project
 TASK_ID=123
 MODEL_ID="<host-provided-model-id>"
 STATE="$PROJECT_ROOT/.project-execution-$TASK_ID.json"

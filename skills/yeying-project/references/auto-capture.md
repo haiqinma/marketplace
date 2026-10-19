@@ -1,6 +1,6 @@
 # 自动会话采集边界与事件协议
 
-`community-project-skill` 不直接读取 Codex、Claude 或其他 Agent 的内部会话数据库。客户端必须通过 hook、事件流或 wrapper 输出可公开给宿主的 JSONL 事件，再交给本 Skill 的采集桥接器。
+`yeying-project` 不直接读取 Codex、Claude 或其他 Agent 的内部会话数据库。客户端必须通过 hook、事件流或 wrapper 输出可公开给宿主的 JSONL 事件，再交给本 Skill 的采集桥接器。
 
 ## 任务绑定
 

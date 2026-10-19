@@ -29,15 +29,16 @@ skills/<skill-id>/
 
 ## 命名模板
 
-社区 Agent 执行类技能统一使用：
+夜莺 Agent 执行类技能统一使用：
 
 ```text
-community-<scope>-skill
+yeying-<scope>
 ```
 
-- `community`：固定前缀，表示这是社区维护的 Agent 执行类技能，区别于系统技能和个人本地技能。
+- `yeying`：固定前缀，表示技能属于夜莺产品生态，并在客户端全局 Skill 命名空间中避免与其他社区或组织冲突。
 - `<scope>`：技能归属范围。产品能力必须使用产品 slug；横向流程只有在不能归属到单个产品时才使用领域 slug。
-- `skill`：固定后缀，表示该目录是 Agent 执行类技能。具体能力边界写入 `description`、`SKILL.md` 正文和必要的 `references/`，不继续拆到名称中。
+
+目录已经位于 `skills/` 下，且同一目录可以同时提供 Chat 和 Agent 格式，因此名称不再添加没有额外区分度的 `skill` 或 `agent` 后缀。具体能力边界写入 `description`、`SKILL.md` 正文和必要的 `references/`。
 
 命名约束：
 
@@ -46,28 +47,28 @@ community-<scope>-skill
 - 名称控制在 64 个字符以内；不使用阶段、版本、人名或临时项目代号。
 - 产品 slug 采用社区产品的稳定英文名，例如 `chat`、`knowledge`、`warehouse`、`project`、`node`、`router`、`agent`、`marketplace`、`wallet`。
 - 不使用 `product`、`general`、`common`、`all` 这类泛 scope 承载多个产品的执行规则；通用概念沉淀到文档或引用模板，产品落地拆到对应产品 skill。
-- 横向流程 scope 只用于明确的非产品工作流，例如 `docs`、`release`、`ops`、`security`、`identity`，不重复写成 `community-community-skill`。
+- 横向流程 scope 只用于明确的非产品工作流，例如 `docs`、`release`、`ops`、`security`、`identity`。
 - 初期按一个产品一个 skill 管理；同一产品内的 Tool、MCP、Agent、部署、运维等能力优先放在该产品 skill 的正文或 `references/` 中，避免过早拆成多个 skill。
 
 示例：
 
 | 场景 | 推荐名称 |
 | --- | --- |
-| Project 任务协作和文件柜同步 | `community-project-skill` |
-| Warehouse 对模型开放资料访问工具 | `community-warehouse-skill` |
-| Router 模型渠道、额度和计量治理 | `community-router-skill` |
-| Knowledge 资料加工、记忆和检索接入 | `community-knowledge-skill` |
-| Node 应用、Tool、Skill、Agent 发布目录 | `community-node-skill` |
-| 社区文档同步到共享系统 | `community-docs-skill` |
+| Project 任务协作和文件柜同步 | `yeying-project` |
+| Warehouse 对模型开放资料访问工具 | `yeying-warehouse` |
+| Router 模型渠道、额度和计量治理 | `yeying-router` |
+| Knowledge 资料加工、记忆和检索接入 | `yeying-knowledge` |
+| Node 应用、Tool、Skill、Agent 发布目录 | `yeying-node` |
+| 社区文档同步到共享系统 | `yeying-docs` |
 
-历史短名、能力型名称或泛 scope 名称（例如 `project-collaboration`、`community-project-collaboration`、`community-product-tool-agent`、`community-product-skill`）不作为新技能主名称继续扩散。已有外部引用如需兼容，应在迁移期通过文档说明或调用方配置处理，不再新增同义目录。
+历史短名、能力型名称或泛 scope 名称（例如 `project-collaboration`、`product-tool-agent`、`general-product-skill`）不作为新技能主名称继续扩散。已有外部引用如需兼容，应在迁移期通过文档说明或调用方配置处理，不再新增同义目录。
 
 ## 当前技能
 
 | Skill | 用途 |
 | --- | --- |
-| `community-project-skill` | 通过 Project 标准 API 管理研发任务生命周期、文档收口、摘要归档并同步文件柜文档 |
-| `community-warehouse-skill` | 按统一契约推进 Warehouse Tool 化、MCP 接入和 Agent 编排 |
+| `yeying-project` | 通过 Project 标准 API 管理研发任务生命周期、文档收口、摘要归档并同步文件柜文档 |
+| `yeying-warehouse` | 按统一契约推进 Warehouse Tool 化、MCP 接入和 Agent 编排 |
 
 ## 维护规则
 

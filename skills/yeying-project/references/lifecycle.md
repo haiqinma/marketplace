@@ -1,6 +1,6 @@
 # Project 研发任务标准生命周期
 
-`community-project-skill` 将 Project 任务作为唯一的任务事实源，将本地仓库作为代码事实源，将 GitHub PR 作为交付事实源。三者通过 `project_id`、`task_id`、执行 `executionId`、commit SHA 和 PR URL 互相引用。
+`yeying-project` 将 Project 任务作为唯一的任务事实源，将本地仓库作为代码事实源，将 GitHub PR 作为交付事实源。三者通过 `project_id`、`task_id`、执行 `executionId`、commit SHA 和 PR URL 互相引用。
 
 ## 阶段
 

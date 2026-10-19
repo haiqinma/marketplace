@@ -1,6 +1,6 @@
 # 任务执行过程归档
 
-`community-project-skill` 可以把一次由 Codex、Claude 或其他 Agent 完成的任务执行过程保存到指定 Project 任务，并和研发生命周期、验证、commit、PR 结果关联。这个能力只理解 Project 任务，不要求 Warehouse，也不要求某一种客户端。
+`yeying-project` 可以把一次由 Codex、Claude 或其他 Agent 完成的任务执行过程保存到指定 Project 任务，并和研发生命周期、验证、commit、PR 结果关联。这个能力只理解 Project 任务，不要求 Warehouse，也不要求某一种客户端。
 
 ## 生命周期
 

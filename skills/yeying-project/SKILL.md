@@ -1,6 +1,6 @@
 ---
-name: community-project-skill
-description: Manage YeYing Project development tasks across intake, analysis, solution approval, implementation, verification, delivery, and audit with AK/SK-signed APIs. Create and update tasks, bind workspaces, associate Codex/Claude/other Agent execution archives, record repository commits and GitHub PR results, and manage the Project file cabinet. Use when a community product task needs a traceable end-to-end delivery workflow; hidden prompts or hidden reasoning are never claimed as captured.
+name: yeying-project
+description: Manage YeYing Project development tasks across intake, analysis, solution approval, implementation, verification, delivery, and audit with AK/SK-signed APIs. Create and update tasks, bind workspaces, associate Codex/Claude/other Agent execution archives, record repository commits and GitHub PR results, and manage the Project file cabinet. Use when a YeYing product task needs a traceable end-to-end delivery workflow; hidden prompts or hidden reasoning are never claimed as captured.
 ---
 
 # Community Project Collaboration
@@ -9,7 +9,7 @@ Use the bundled client to treat Project as the source of truth for task context 
 
 The standard lifecycle is documented in [references/lifecycle.md](references/lifecycle.md). Do not start implementation before the task has a recorded analysis, a feasible solution, acceptance criteria, and explicit approval. Before verification, record the documentation closeout for local `docs` and `books/yeying`: updated, checked with no change needed (with reason), and any cross-project impact. Do not mark work complete before verification, PR metadata, and the execution archive are associated with the same task.
 
-For work performed by Codex, Claude, or another Agent on a specific task, use the independent execution archive workflow in [references/execution-archive.md](references/execution-archive.md). It records the available execution history, publishes the archive as task attachments, and writes one idempotent task reference. This workflow belongs to Project and does not require or call `community-warehouse-skill`.
+For work performed by Codex, Claude, or another Agent on a specific task, use the independent execution archive workflow in [references/execution-archive.md](references/execution-archive.md). It records the available execution history, publishes the archive as task attachments, and writes one idempotent task reference. This workflow belongs to Project and does not require or call `yeying-warehouse`.
 
 ## Client
 

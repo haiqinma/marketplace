@@ -1,4 +1,4 @@
 interface:
   display_name: "Warehouse 通用对象能力"
   short_description: "按统一契约调用 Warehouse 的空间、对象、权限和完整性能力"
-  default_prompt: "使用 $community-warehouse-skill 调用或评估 Warehouse 的通用对象能力。"
+  default_prompt: "使用 $yeying-warehouse 调用或评估 Warehouse 的通用对象能力。"

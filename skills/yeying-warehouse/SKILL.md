@@ -1,5 +1,5 @@
 ---
-name: community-warehouse-skill
+name: yeying-warehouse
 description: Use YeYing Warehouse's generic, scoped, auditable object capabilities for listing spaces, inspecting metadata, reading objects, and writing small objects through the stable HTTP Tool contract.
 ---
 
