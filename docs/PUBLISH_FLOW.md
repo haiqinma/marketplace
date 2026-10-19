@@ -2,15 +2,15 @@
 
 本文面向技能作者、维护者和 Chat 集成开发者，说明一个社区技能从提交到用户可用的完整流程。
 
-本仓库是 Chat Marketplace，用于维护技能、工具、模型服务商和存储能力等可发现、可安装、可配置的社区能力。产品层统一使用“技能、工具、模型、存储”四层术语；MCP 只作为工具层当前主要协议和具体实现方式出现。
+本仓库是社区 Marketplace，用于维护技能、工具、模型服务商和存储能力等可发现、可安装、可配置的社区能力。Chat 使用 JSON 技能包，Codex、Claude 等 Agent 使用 `SKILL.md`；产品层统一使用“技能、工具、模型、存储”四层术语，MCP 只作为工具层当前主要协议和具体实现方式出现。
 
 当前已经落地的是技能发布流程和 Tool Server 工具包发布流程。模型服务商和存储能力先保留扩展方向，后续需要补各自 schema、审核规则和发布清单。
 
-Codex 执行类技能维护在 `skills/codex/`，用于沉淀工程协作和产品落地方法，格式为 `SKILL.md` 目录结构。它们不进入 Chat 当前加载的 `packages.json`，维护规则见 [Codex 执行类技能](./CODEX_SKILLS.md)。
+Agent 执行类技能和 Chat 技能共用 `skills/<skill-id>/` 一级目录。Agent 格式使用 `SKILL.md`，Chat 格式使用 `<lang>.json`，两者可以共存；Agent-only Skill 不进入 Chat 当前加载的 `packages.json`。维护规则见 [Agent 执行类技能](./AGENT_SKILLS.md)。
 
 ## 1. 流程总览
 
-1. 作者在 `skills/chat/<skill-id>/<lang>.json` 下新增或修改技能包。
+1. 作者在 `skills/<skill-id>/<lang>.json` 下新增或修改 Chat 技能包。
 2. 作者运行 `npm run check` 生成 `index.json` 和 `packages.json`。
 3. 作者提交 Pull Request。
 4. 维护者审核技能质量、安全和依赖声明。
@@ -36,14 +36,14 @@ Tool Server 包流程：
 复制模板：
 
 ```bash
-mkdir -p skills/chat/<skill-id>
-cp templates/skill.json skills/chat/<skill-id>/cn.json
+mkdir -p skills/<skill-id>
+cp templates/skill.json skills/<skill-id>/cn.json
 ```
 
 编辑技能包时重点填写：
 
-- `id`：稳定 ID，使用 kebab-case，例如 `web-research`；必须和父目录 `skills/chat/<skill-id>/` 中的 `<skill-id>` 一致
-- 文件路径：必须放在 `skills/chat/<skill-id>/<lang>.json`，`<lang>` 当前支持 `cn` 和 `en`
+- `id`：稳定 ID，使用 kebab-case，例如 `web-research`；必须和父目录 `skills/<skill-id>/` 中的 `<skill-id>` 一致
+- 文件路径：必须放在 `skills/<skill-id>/<lang>.json`，`<lang>` 当前支持 `cn` 和 `en`
 - `name`：用户看到的名称，必须清晰、聚焦；推荐使用 `{ "cn": "...", "en": "..." }`
 - `description`：说明这个技能适合什么任务；推荐使用 `{ "cn": "...", "en": "..." }`
 - `launch`：点击技能后进入聊天还是工作区

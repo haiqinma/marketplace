@@ -1,23 +1,23 @@
-# Codex 执行类技能
+# Agent 执行类技能
 
-本文说明 `skills/codex/` 下的 Codex 技能定位、目录结构和维护规则。
+本文说明 `skills/<skill-id>/` 下由 `SKILL.md` 声明的 Agent 技能定位、目录结构和维护规则。
 
 ## 定位
 
-`skills/codex/` 保存面向 Codex 的执行类技能，用于沉淀社区项目中的重复工程方法，例如：
+Agent 执行类技能面向 Codex、Claude 和其他兼容 `SKILL.md` 的客户端，用于沉淀社区项目中的重复工程方法，例如：
 
 - Warehouse、Router、Knowledge、Project 等单产品 Tool 化、MCP 接入和 Agent 化；
 - Project 研发任务全生命周期管理、AI 执行归档和文件柜同步；
 - 后续可复用的部署、发布、审计或迁移流程。
 
-这类技能不是 Chat Marketplace 的用户技能包，不使用 `skills/chat/<skill-id>/<lang>.json` 格式，也不会被当前 `scripts/build.mjs` 写入 `packages.json`。
+所有 Skill 共用 `skills/<skill-id>/` 全局命名空间。Agent 格式使用 `SKILL.md`，Chat 格式使用 `<lang>.json`；同一个 Skill 可以同时支持两种格式。只有存在 `cn.json` 或 `en.json` 的 Skill 才会被 `scripts/build.mjs` 写入 Chat 的 `packages.json`。
 
 ## 目录结构
 
-每个 Codex 技能使用独立目录：
+每个 Skill 使用独立的一级目录；Agent 入口和支持资源如下：
 
 ```text
-skills/codex/<skill-id>/
+skills/<skill-id>/
   SKILL.md
   agents/openai.yaml
   references/
@@ -29,15 +29,15 @@ skills/codex/<skill-id>/
 
 ## 命名模板
 
-Codex 执行类技能统一使用：
+社区 Agent 执行类技能统一使用：
 
 ```text
 community-<scope>-skill
 ```
 
-- `community`：固定前缀，表示这是社区维护的 Codex 执行类技能，区别于系统技能、个人本地技能和 Chat 用户技能包。
+- `community`：固定前缀，表示这是社区维护的 Agent 执行类技能，区别于系统技能和个人本地技能。
 - `<scope>`：技能归属范围。产品能力必须使用产品 slug；横向流程只有在不能归属到单个产品时才使用领域 slug。
-- `skill`：固定后缀，表示该目录是 Codex 执行类技能。具体能力边界写入 `description`、`SKILL.md` 正文和必要的 `references/`，不继续拆到名称中。
+- `skill`：固定后缀，表示该目录是 Agent 执行类技能。具体能力边界写入 `description`、`SKILL.md` 正文和必要的 `references/`，不继续拆到名称中。
 
 命名约束：
 
@@ -81,16 +81,16 @@ community-<scope>-skill
 
 ## 校验
 
-新增或修改 Codex 技能后，至少执行：
+新增或修改 Agent 技能后，至少执行：
 
 ```bash
-python3 ~/.codex/skills/.system/skill-creator/scripts/quick_validate.py skills/codex/<skill-id>
+python3 ~/.codex/skills/.system/skill-creator/scripts/quick_validate.py skills/<skill-id>
 ```
 
-Chat 技能和 Tool Server 的发布清单仍使用：
+统一目录和 Tool Server 的发布清单校验使用：
 
 ```bash
 npm run check
 ```
 
-`npm run check` 当前不会处理 `skills/codex/`。
+`npm run check` 会校验每个一级目录至少包含 `cn.json`、`en.json` 或 `SKILL.md`，并验证 Chat `id` 和 Agent `name` 都与目录名一致。Agent-only Skill 不进入 Chat 的 `index.json` 和 `packages.json`。
