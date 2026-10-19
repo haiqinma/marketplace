@@ -55,35 +55,45 @@ function validateAgentSkill(skillFolder) {
 }
 
 function validateSkillReadme(skillFolder) {
-  const file = path.join(skillsDir, skillFolder, "README.md");
-  const relative = path.relative(root, file);
+  const englishFile = path.join(skillsDir, skillFolder, "README.md");
+  const chineseFile = path.join(skillsDir, skillFolder, "README_CN.md");
+  const englishRelative = path.relative(root, englishFile);
+  const chineseRelative = path.relative(root, chineseFile);
+
   assert(
-    fs.existsSync(file),
-    `${relative}: every skill must provide a bilingual README.md`,
+    fs.existsSync(englishFile),
+    `${englishRelative}: English README.md is required`,
+  );
+  assert(
+    fs.existsSync(chineseFile),
+    `${chineseRelative}: Chinese README_CN.md is required`,
   );
 
-  const content = fs.readFileSync(file, "utf8");
+  const english = fs.readFileSync(englishFile, "utf8").trim();
+  const chinese = fs.readFileSync(chineseFile, "utf8").trim();
   assert(
-    /^#\s+\S.+$/m.test(content),
-    `${relative}: README.md must contain a level-one title`,
-  );
-  const bilingual = content.match(
-    /^## 中文\s*\r?\n([\s\S]*?)^## English\s*\r?\n([\s\S]+)$/m,
+    /^#\s+\S.+$/m.test(english),
+    `${englishRelative}: README.md must contain a level-one title`,
   );
   assert(
-    bilingual,
-    `${relative}: README.md must contain ## 中文 and ## English sections`,
-  );
-
-  const chinese = bilingual[1].trim();
-  const english = bilingual[2].trim();
-  assert(
-    chinese && /[\u3400-\u9fff]/u.test(chinese),
-    `${relative}: 中文 section must contain Chinese content`,
+    /^#\s+\S.+$/m.test(chinese),
+    `${chineseRelative}: README_CN.md must contain a level-one title`,
   );
   assert(
-    english && /[A-Za-z]{3}/.test(english),
-    `${relative}: English section must contain English content`,
+    /[A-Za-z]{3}/.test(english),
+    `${englishRelative}: README.md must contain English content`,
+  );
+  assert(
+    /[\u3400-\u9fff]/u.test(chinese),
+    `${chineseRelative}: README_CN.md must contain Chinese content`,
+  );
+  assert(
+    /\(README_CN\.md\)/.test(english),
+    `${englishRelative}: README.md must link to README_CN.md`,
+  );
+  assert(
+    /\(README\.md\)/.test(chinese),
+    `${chineseRelative}: README_CN.md must link to README.md`,
   );
 }
 
