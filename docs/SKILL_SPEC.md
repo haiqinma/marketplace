@@ -1,6 +1,6 @@
 # Skill Package Spec
 
-本文描述 Chat Marketplace 的用户技能包 JSON 格式，适用于 `skills/<skill-id>/<lang>.json`。`<lang>` 当前支持 `cn` 和 `en`，文件中的 `id` 必须和父目录 `<skill-id>` 一致。Agent 执行类技能在同一一级目录使用 `SKILL.md`，不进入本规范和 Chat `packages.json`，见 [Agent 执行类技能](./AGENT_SKILLS.md)。
+本文描述 Chat Marketplace 的用户技能包 JSON 格式，适用于 `skills/<skill-id>/<lang>.json`。`<lang>` 当前支持 `cn` 和 `en`，文件中的 `id` 必须和父目录 `<skill-id>` 一致。每个 Skill 目录必须提供面向开发者的 `README.md`，并同时包含非空的 `## 中文` 和 `## English` 章节。Agent 执行类技能在同一一级目录使用 `SKILL.md`，不进入本规范和 Chat `packages.json`，见 [Agent 执行类技能](./AGENT_SKILLS.md)。
 
 ## Required Fields
 
@@ -62,6 +62,7 @@ Example:
 
 ## Review Rules
 
+- Every Skill must include a bilingual `README.md` with Chinese and English sections.
 - Skills must describe a concrete task, not a vague assistant persona.
 - Dependencies must be explicit.
 - API keys, tokens, private URLs, and local file paths are forbidden.

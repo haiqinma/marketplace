@@ -4,7 +4,7 @@
 
 本仓库维护 Chat 可发现、可安装、可配置的社区能力包，包括技能、工具、模型服务商和后续存储能力。产品层统一使用“技能、工具、模型、存储”四层术语；MCP 只作为工具层当前主要协议和具体实现方式出现。
 
-同时，本仓库维护 Codex、Claude 和其他 Agent 使用的执行类技能，用于沉淀社区工程协作、产品 Tool 化、Agent 化等可复用工作方法。所有技能统一使用 `skills/<skill-id>/` 一级目录；Chat 技能由 `cn.json`/`en.json` 声明，Agent 技能由 `SKILL.md` 声明，两种格式可以共存。只有 Chat 格式进入当前加载的 `packages.json`。
+同时，本仓库维护 Codex、Claude 和其他 Agent 使用的执行类技能，用于沉淀社区工程协作、产品 Tool 化、Agent 化等可复用工作方法。所有技能统一使用 `skills/<skill-id>/` 一级目录，并必须提供同时包含中文和英文的 `README.md`；Chat 技能由 `cn.json`/`en.json` 声明，Agent 技能由 `SKILL.md` 声明，两种格式可以共存。只有 Chat 格式进入当前加载的 `packages.json`。
 
 ## 产品模型
 
@@ -35,6 +35,7 @@
 ```txt
 skills/
   <skill-id>/            全局唯一的技能目录
+    README.md            面向开发者的中英文说明，必需
     cn.json              Chat 中文版本，可选
     en.json              Chat 英文版本，可选
     SKILL.md             Agent 执行类技能入口，可选
@@ -63,19 +64,20 @@ scripts/
   build.mjs              校验并生成技能和工具发布清单
 ```
 
-当前 `scripts/build.mjs` 扫描 `skills/<skill-id>/`：校验 Chat 和 Agent 两种入口，只把 `cn.json`/`en.json` 写入 Chat 发布清单；同时处理 `tools/servers/` 下的 Tool Server 包。`providers/` 后续应增加对应 schema 和发布清单生成逻辑。
+当前 `scripts/build.mjs` 扫描 `skills/<skill-id>/`：校验每个 Skill 都有包含 `## 中文` 和 `## English` 的双语 `README.md`，校验 Chat 和 Agent 两种入口，只把 `cn.json`/`en.json` 写入 Chat 发布清单；同时处理 `tools/servers/` 下的 Tool Server 包。`providers/` 后续应增加对应 schema 和发布清单生成逻辑。
 
 ## 添加技能
 
-1. 创建 `skills/<skill-id>/`，复制 `templates/skill.json` 为 `skills/<skill-id>/<lang>.json`，例如 `skills/web-research/cn.json`。
-2. 填写任务定义、模型偏好、内置工具、Tool Server 依赖和开场白。
-3. 运行：
+1. 创建 `skills/<skill-id>/`，复制 `templates/skill.README.md` 为 `skills/<skill-id>/README.md`，并完成中文和英文说明。
+2. 复制 `templates/skill.json` 为 `skills/<skill-id>/<lang>.json`，例如 `skills/web-research/cn.json`。
+3. 填写任务定义、模型偏好、内置工具、Tool Server 依赖和开场白。
+4. 运行：
 
 ```bash
 node scripts/build.mjs
 ```
 
-4. 提交 Pull Request。
+5. 提交 Pull Request。
 
 ## 发布流程
 

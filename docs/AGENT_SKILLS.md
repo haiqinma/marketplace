@@ -18,6 +18,7 @@ Agent 执行类技能面向 Codex、Claude 和其他兼容 `SKILL.md` 的客户�
 
 ```text
 skills/<skill-id>/
+  README.md
   SKILL.md
   agents/openai.yaml
   references/
@@ -25,7 +26,7 @@ skills/<skill-id>/
   assets/
 ```
 
-只有 `SKILL.md` 是必需文件。`references/`、`scripts/` 和 `assets/` 只在确有复用价值时增加。
+`README.md` 和 `SKILL.md` 是必需文件。`README.md` 面向开发者，必须同时提供非空的 `## 中文` 和 `## English` 章节；`SKILL.md` 是 Agent 运行时入口，应保持聚焦，不为了双语展示重复整份运行指令。`references/`、`scripts/` 和 `assets/` 只在确有复用价值时增加。
 
 ## 命名模板
 
@@ -74,6 +75,7 @@ yeying-<scope>
 
 ## 维护规则
 
+- 每个 Skill 必须提供中英文双语 `README.md`，两种语言应描述一致的用途、能力和边界。
 - 技能说明必须聚焦实际任务，不写泛化人格设定。
 - Project 研发任务必须在验证前记录本地 `docs` 和 `books/yeying` 的文档检查结果；复杂流程才使用 PlantUML，简单流程用阶段表即可。
 - 执行归档的 Markdown 是摘要优先的阅读入口，原始脱敏事件保留在折叠内容和 `transcript.json`，不得为了可读性删除审计资料。
@@ -96,4 +98,4 @@ python3 ~/.codex/skills/.system/skill-creator/scripts/quick_validate.py skills/<
 npm run check
 ```
 
-`npm run check` 会校验每个一级目录至少包含 `cn.json`、`en.json` 或 `SKILL.md`，并验证 Chat `id` 和 Agent `name` 都与目录名一致。Agent-only Skill 不进入 Chat 的 `index.json` 和 `packages.json`。
+`npm run check` 会校验每个一级目录都包含双语 `README.md`，且至少包含 `cn.json`、`en.json` 或 `SKILL.md`；同时验证 Chat `id` 和 Agent `name` 都与目录名一致。Agent-only Skill 不进入 Chat 的 `index.json` 和 `packages.json`。

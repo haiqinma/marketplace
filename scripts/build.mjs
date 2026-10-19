@@ -54,6 +54,39 @@ function validateAgentSkill(skillFolder) {
   assert(name === skillFolder, `${relative}: skill name must match parent folder ${skillFolder}`);
 }
 
+function validateSkillReadme(skillFolder) {
+  const file = path.join(skillsDir, skillFolder, "README.md");
+  const relative = path.relative(root, file);
+  assert(
+    fs.existsSync(file),
+    `${relative}: every skill must provide a bilingual README.md`,
+  );
+
+  const content = fs.readFileSync(file, "utf8");
+  assert(
+    /^#\s+\S.+$/m.test(content),
+    `${relative}: README.md must contain a level-one title`,
+  );
+  const bilingual = content.match(
+    /^## 中文\s*\r?\n([\s\S]*?)^## English\s*\r?\n([\s\S]+)$/m,
+  );
+  assert(
+    bilingual,
+    `${relative}: README.md must contain ## 中文 and ## English sections`,
+  );
+
+  const chinese = bilingual[1].trim();
+  const english = bilingual[2].trim();
+  assert(
+    chinese && /[\u3400-\u9fff]/u.test(chinese),
+    `${relative}: 中文 section must contain Chinese content`,
+  );
+  assert(
+    english && /[A-Za-z]{3}/.test(english),
+    `${relative}: English section must contain English content`,
+  );
+}
+
 function validateToolServer(server, file) {
   assert(server.schemaVersion === "1.0", `${file}: schemaVersion must be 1.0`);
   assert(
@@ -155,6 +188,7 @@ function collectSkills() {
       chatLanguages.length > 0 || hasAgentSkill,
       `skills/${skillFolder}: expected cn.json, en.json, or SKILL.md`,
     );
+    validateSkillReadme(skillFolder);
 
     if (hasAgentSkill) {
       validateAgentSkill(skillFolder);

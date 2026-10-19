@@ -6,7 +6,7 @@
 
 当前已经落地的是技能发布流程和 Tool Server 工具包发布流程。模型服务商和存储能力先保留扩展方向，后续需要补各自 schema、审核规则和发布清单。
 
-Agent 执行类技能和 Chat 技能共用 `skills/<skill-id>/` 一级目录。Agent 格式使用 `SKILL.md`，Chat 格式使用 `<lang>.json`，两者可以共存；Agent-only Skill 不进入 Chat 当前加载的 `packages.json`。维护规则见 [Agent 执行类技能](./AGENT_SKILLS.md)。
+Agent 执行类技能和 Chat 技能共用 `skills/<skill-id>/` 一级目录。每个 Skill 必须提供包含中文和英文的 `README.md`；Agent 格式使用 `SKILL.md`，Chat 格式使用 `<lang>.json`，两者可以共存；Agent-only Skill 不进入 Chat 当前加载的 `packages.json`。维护规则见 [Agent 执行类技能](./AGENT_SKILLS.md)。
 
 ## 1. 流程总览
 
@@ -37,11 +37,13 @@ Tool Server 包流程：
 
 ```bash
 mkdir -p skills/<skill-id>
+cp templates/skill.README.md skills/<skill-id>/README.md
 cp templates/skill.json skills/<skill-id>/cn.json
 ```
 
 编辑技能包时重点填写：
 
+- `README.md`：必须包含非空的 `## 中文` 和 `## English`，并用两种语言说明一致的用途、能力和边界
 - `id`：稳定 ID，使用 kebab-case，例如 `web-research`；必须和父目录 `skills/<skill-id>/` 中的 `<skill-id>` 一致
 - 文件路径：必须放在 `skills/<skill-id>/<lang>.json`，`<lang>` 当前支持 `cn` 和 `en`
 - `name`：用户看到的名称，必须清晰、聚焦；推荐使用 `{ "cn": "...", "en": "..." }`
