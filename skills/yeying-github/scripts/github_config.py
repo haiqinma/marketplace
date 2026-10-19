@@ -21,6 +21,7 @@ except ModuleNotFoundError:  # Python 3.10 and earlier
 
 DEFAULT_CONFIG_PATH = Path.home() / ".yeying" / "skills" / "github" / "config.toml"
 VALID_MODES = {"api", "git"}
+VALID_VISIBILITIES = {"auto", "public", "private"}
 
 
 class ConfigError(RuntimeError):
@@ -30,6 +31,7 @@ class ConfigError(RuntimeError):
 @dataclass(frozen=True)
 class Settings:
     mode: str
+    visibility: str
     sync_script: str
     pr_script: str
     origin_token: str
@@ -89,7 +91,11 @@ def _read_config(path: Path, required: bool) -> dict[str, object]:
     return section
 
 
-def load(explicit_path: str | Path | None = None, mode_override: str | None = None) -> Settings:
+def load(
+    explicit_path: str | Path | None = None,
+    mode_override: str | None = None,
+    visibility_override: str | None = None,
+) -> Settings:
     explicit = Path(explicit_path).expanduser() if explicit_path else None
     env_path = os.environ.get("YEYING_GITHUB_CONFIG")
     path = explicit or (Path(env_path).expanduser() if env_path else DEFAULT_CONFIG_PATH)
@@ -103,6 +109,17 @@ def load(explicit_path: str | Path | None = None, mode_override: str | None = No
     if mode not in VALID_MODES:
         raise ConfigError(f"GitHub mode must be one of {sorted(VALID_MODES)}, got: {mode!r}")
 
+    visibility = (
+        (visibility_override or "").strip()
+        or os.environ.get("YEYING_GITHUB_VISIBILITY", "").strip()
+        or str(section.get("visibility", "auto")).strip()
+    ).lower()
+    if visibility not in VALID_VISIBILITIES:
+        raise ConfigError(
+            "GitHub visibility must be one of "
+            f"{sorted(VALID_VISIBILITIES)}, got: {visibility!r}"
+        )
+
     sync_script = str(section.get("sync_script", "scripts/sync.sh")).strip()
     pr_script = str(section.get("pr_script", "scripts/pr.sh")).strip()
     origin_token = str(section.get("origin_token", "")).strip()
@@ -111,6 +128,7 @@ def load(explicit_path: str | Path | None = None, mode_override: str | None = No
         raise ConfigError("sync_script and pr_script must be non-empty paths")
     return Settings(
         mode=mode,
+        visibility=visibility,
         sync_script=sync_script,
         pr_script=pr_script,
         origin_token=origin_token,

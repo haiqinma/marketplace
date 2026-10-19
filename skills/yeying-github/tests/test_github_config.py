@@ -23,6 +23,7 @@ class GitHubConfigTests(unittest.TestCase):
         ):
             settings = load()
         self.assertEqual(settings.mode, "api")
+        self.assertEqual(settings.visibility, "auto")
         self.assertEqual(settings.sync_script, "scripts/sync.sh")
         self.assertEqual(settings.pr_script, "scripts/pr.sh")
         self.assertEqual(settings.origin_token, "")
@@ -39,6 +40,35 @@ class GitHubConfigTests(unittest.TestCase):
     def test_rejects_invalid_mode(self) -> None:
         with mock.patch.dict(os.environ, {"YEYING_GITHUB_MODE": "ssh"}, clear=True):
             with self.assertRaises(ConfigError):
+                load()
+
+    def test_visibility_override_precedence(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            config = Path(directory) / "config.toml"
+            config.write_text(
+                '[github]\nvisibility = "public"\n', encoding="utf-8"
+            )
+            with mock.patch.dict(
+                os.environ, {"YEYING_GITHUB_VISIBILITY": "private"}, clear=True
+            ):
+                settings = load(config, visibility_override="auto")
+        self.assertEqual(settings.visibility, "auto")
+
+    def test_accepts_public_and_private_visibility(self) -> None:
+        for visibility in ("public", "private"):
+            with self.subTest(visibility=visibility), tempfile.TemporaryDirectory() as directory:
+                config = Path(directory) / "config.toml"
+                config.write_text(
+                    f'[github]\nvisibility = "{visibility}"\n', encoding="utf-8"
+                )
+                settings = load(config)
+            self.assertEqual(settings.visibility, visibility)
+
+    def test_rejects_invalid_visibility(self) -> None:
+        with mock.patch.dict(
+            os.environ, {"YEYING_GITHUB_VISIBILITY": "internal"}, clear=True
+        ):
+            with self.assertRaisesRegex(ConfigError, "visibility"):
                 load()
 
     def test_loads_tokens_only_from_secure_config(self) -> None:

@@ -17,6 +17,7 @@ class GitHubDeliveryTests(unittest.TestCase):
     def settings(self) -> Settings:
         return Settings(
             mode="api",
+            visibility="auto",
             sync_script="scripts/sync.sh",
             pr_script="scripts/pr.sh",
             origin_token="origin-secret",
@@ -92,6 +93,66 @@ class GitHubDeliveryTests(unittest.TestCase):
             ],
             env=env,
         )
+
+    def test_detects_public_repository_pair(self) -> None:
+        with mock.patch.object(
+            github_delivery,
+            "github_repo_metadata",
+            side_effect=[{"visibility": "public"}, {"private": False}],
+        ) as metadata:
+            visibility = github_delivery.resolve_repository_visibility(
+                "auto", "liuppx/repo", "yeying-community/repo", "configured-token"
+            )
+        self.assertEqual(visibility, "public")
+        self.assertEqual(metadata.call_count, 2)
+
+    def test_detects_private_repository_pair(self) -> None:
+        with mock.patch.object(
+            github_delivery,
+            "github_repo_metadata",
+            side_effect=[{"visibility": "private"}, {"private": True}],
+        ):
+            visibility = github_delivery.resolve_repository_visibility(
+                "private", "liuppx/repo", "yeying-community/repo", "configured-token"
+            )
+        self.assertEqual(visibility, "private")
+
+    def test_rejects_mixed_repository_visibility(self) -> None:
+        with mock.patch.object(
+            github_delivery,
+            "github_repo_metadata",
+            side_effect=[{"visibility": "public"}, {"visibility": "private"}],
+        ), self.assertRaisesRegex(SystemExit, "different GitHub visibility"):
+            github_delivery.resolve_repository_visibility(
+                "auto", "liuppx/repo", "yeying-community/repo", "configured-token"
+            )
+
+    def test_rejects_explicit_visibility_mismatch(self) -> None:
+        with mock.patch.object(
+            github_delivery,
+            "github_repo_metadata",
+            side_effect=[{"visibility": "private"}, {"visibility": "private"}],
+        ), self.assertRaisesRegex(SystemExit, "Configured visibility is public"):
+            github_delivery.resolve_repository_visibility(
+                "public", "liuppx/repo", "yeying-community/repo", "configured-token"
+            )
+
+    def test_requires_pr_credential_for_visibility_preflight(self) -> None:
+        with self.assertRaisesRegex(SystemExit, "missing upstream_token"):
+            github_delivery.resolve_repository_visibility(
+                "auto", "liuppx/repo", "yeying-community/repo", ""
+            )
+
+    def test_private_access_error_does_not_expose_token(self) -> None:
+        error = github_delivery.urllib.error.HTTPError(
+            "https://api.github.com/repos/private/repo", 404, "Not Found", {}, None
+        )
+        with mock.patch.object(
+            github_delivery.urllib.request, "urlopen", side_effect=error
+        ), self.assertRaises(SystemExit) as raised:
+            github_delivery.github_repo_metadata("private/repo", "super-secret")
+        self.assertIn("must read both", str(raised.exception))
+        self.assertNotIn("super-secret", str(raised.exception))
 
 
 if __name__ == "__main__":

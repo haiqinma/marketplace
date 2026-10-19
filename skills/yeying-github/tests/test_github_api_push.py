@@ -16,6 +16,7 @@ class GitHubApiPushTests(unittest.TestCase):
     def test_credentials_are_loaded_from_settings(self) -> None:
         settings = Settings(
             mode="api",
+            visibility="auto",
             sync_script="scripts/sync.sh",
             pr_script="scripts/pr.sh",
             origin_token="configured-origin",
@@ -29,6 +30,7 @@ class GitHubApiPushTests(unittest.TestCase):
     def test_upstream_token_is_required_only_for_pr_operations(self) -> None:
         settings = Settings(
             mode="api",
+            visibility="auto",
             sync_script="scripts/sync.sh",
             pr_script="scripts/pr.sh",
             origin_token="configured-origin",

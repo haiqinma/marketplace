@@ -1,6 +1,6 @@
 ---
 name: yeying-github
-description: Publish YeYing repository work from a contributor fork's main branch to origin/main, then reuse or create an accurate pull request into the community upstream/main. Use when GitHub delivery must switch between native Git/gh scripts and GitHub API transport because some environments restrict git push or GitHub CLI execution.
+description: Publish YeYing repository work from a public or private contributor fork's main branch to origin/main, then reuse or create an accurate pull request into the community upstream/main. Use when GitHub delivery must switch between native Git/gh scripts and GitHub API transport because some environments restrict git push or GitHub CLI execution.
 ---
 
 # YeYing GitHub Delivery
@@ -13,14 +13,22 @@ local main -> personal origin/main -> community upstream/main PR
 
 Development happens directly on the contributor fork's `main` branch. Do not create a temporary feature branch unless the user explicitly changes this workflow. Require distinct `origin` and `upstream` GitHub remotes, and require both the source and base branch to be `main`.
 
-## Transport
+## Transport And Visibility
 
-Read [references/configuration.md](references/configuration.md) when selecting or configuring transport.
+Read [references/configuration.md](references/configuration.md) when selecting transport, repository visibility, or credentials.
 
 - `api`: use the bundled `scripts/github_api_push.py`. Choose this when `git push`, SSH, or `gh` is blocked or unreliable. It recreates committed objects through the GitHub API, verifies the final tree, updates `origin/main`, and reuses or creates the upstream PR. It still uses local read-only Git commands to inspect commits and trees; the switch replaces Git's remote write transport, not the local repository database.
 - `git`: prefer the target repository's existing `scripts/sync.sh` and `scripts/pr.sh`. The wrapper calls them with non-interactive settings and explicit PR metadata; do not replace mature repository scripts with ad hoc push or PR commands.
 
 The default is `api`. Override it with `--mode`, `YEYING_GITHUB_MODE`, or `~/.yeying/skills/github/config.toml`.
+
+Treat transport and visibility as independent settings:
+
+- `visibility = "auto"` is recommended. Detect both repositories through GitHub and print the resolved `public` or `private` value before delivery.
+- `visibility = "public"` or `"private"` asserts the expected access model. Stop when either repository does not match.
+- Require origin and upstream to have the same visibility. Do not try to bridge a public repository and a private repository with this fork workflow.
+
+Override visibility with `--visibility`, `YEYING_GITHUB_VISIBILITY`, or the config file. Always run the remote visibility preflight in both API and Git modes. For private repositories, the configured `upstream_token` must read both origin and upstream; this is required to discover the private PR head and base reliably.
 
 ## Workflow
 
@@ -47,6 +55,7 @@ python3 scripts/github_delivery.py --title "fix(router): preserve provider failo
 
 # Force GitHub API transport
 python3 scripts/github_delivery.py --mode api --dry-run \
+  --visibility auto \
   --title "docs(skills): add yeying GitHub delivery workflow"
 
 # Force native repository scripts
@@ -60,6 +69,6 @@ python3 scripts/github_delivery.py --mode api --allow-dirty \
 
 ## Permission Boundary
 
-Read `origin_token` and `upstream_token` only from `~/.yeying/skills/github/config.toml` (or the file selected with `--config`/`YEYING_GITHUB_CONFIG`). Do not use ambient `GH_TOKEN`, `GITHUB_TOKEN`, or `UPSTREAM_TOKEN` as configuration. A config containing tokens must be mode `0600` or stricter. The upstream token must be able to read both private head and base repositories; a fine-grained token bound to only one resource owner cannot create a PR across two private owners.
+Read `origin_token` and `upstream_token` only from `~/.yeying/skills/github/config.toml` (or the file selected with `--config`/`YEYING_GITHUB_CONFIG`). Do not use ambient `GH_TOKEN`, `GITHUB_TOKEN`, or `UPSTREAM_TOKEN` as configuration. A config containing tokens must be mode `0600` or stricter. The upstream token must be able to read both private head and base repositories; a fine-grained token bound to only one resource owner may not support a PR across two private owners.
 
 Never print tokens, add collaborators, alter repository visibility, force-update refs, merge a PR, or change branch protection unless the user explicitly requests that separate operation.
