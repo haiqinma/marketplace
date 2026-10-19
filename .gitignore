@@ -3,3 +3,13 @@ node_modules/
 .DS_Store
 __pycache__/
 *.pyc
+
+# Project skill local task state
+.project-task.json
+.project-lifecycle.json
+.project-execution.json
+.project-execution/
+.project-task-*.json
+.project-lifecycle-*.json
+.project-execution-*.json
+.project-execution-*/

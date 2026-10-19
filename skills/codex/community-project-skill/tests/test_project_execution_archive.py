@@ -13,6 +13,17 @@ import project_execution_archive as archive  # noqa: E402
 
 
 class ExecutionArchiveTest(unittest.TestCase):
+    def test_default_paths_are_scoped_by_task_id(self):
+        root = Path("/tmp/workspace")
+        self.assertEqual(
+            archive.default_execution_state_path(root, 214),
+            root / ".project-execution-214.json",
+        )
+        self.assertEqual(
+            archive.default_execution_output_dir(root, 214),
+            root / ".project-execution-214",
+        )
+
     def test_redaction_keeps_normal_field_names(self):
         value = archive.redact({
             "risks": ["保留这段风险"],

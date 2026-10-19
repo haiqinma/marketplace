@@ -13,6 +13,7 @@ from typing import Any
 
 from project_api import ProjectApiError, load_config, markdown_to_task_html, request_api
 from project_execution_archive import redact
+from project_task_binding import task_marker_name
 
 
 SCHEMA = "yeying.project.development-lifecycle.v1"
@@ -71,6 +72,10 @@ def load_state(path: Path) -> dict[str, Any]:
     return state
 
 
+def default_state_path(workdir: Path, task_id: int) -> Path:
+    return workdir / f".project-lifecycle-{task_id}.json"
+
+
 def initialize(project_id: int, task_id: int, workdir: Path, state_path: Path, config_path: str | Path | None = None) -> dict[str, Any]:
     config = load_config(config_path)
     task = request_api(config, "GET", "/api/project/task/one", {"task_id": task_id})
@@ -79,7 +84,7 @@ def initialize(project_id: int, task_id: int, workdir: Path, state_path: Path, c
         raise ProjectApiError(f"任务 {task_id} 属于 Project {task_project_id}，不是 {project_id}")
     workdir.mkdir(parents=True, exist_ok=True)
     marker = {"project_id": project_id, "task_id": task_id}
-    marker_path = workdir / ".project-task.json"
+    marker_path = workdir / task_marker_name(task_id)
     if marker_path.is_file():
         existing_marker = read_json(marker_path)
         if existing_marker != marker:
@@ -290,7 +295,7 @@ def build_parser() -> argparse.ArgumentParser:
     create.add_argument("--project-id", type=int, required=True)
     create.add_argument("--name", required=True)
     create.add_argument("--workdir", type=Path, required=True)
-    create.add_argument("--state", type=Path, help="默认写入工作区 .project-lifecycle.json")
+    create.add_argument("--state", type=Path, help="默认写入工作区 .project-lifecycle-<task-id>.json")
     create.add_argument("--column-id")
     create.add_argument("--content-file", type=Path)
     create.add_argument("--config", help="Project TOML 配置文件")
@@ -299,7 +304,7 @@ def build_parser() -> argparse.ArgumentParser:
     bind.add_argument("--project-id", type=int, required=True)
     bind.add_argument("--task-id", type=int, required=True)
     bind.add_argument("--workdir", type=Path, required=True)
-    bind.add_argument("--state", type=Path, help="默认写入工作区 .project-lifecycle.json")
+    bind.add_argument("--state", type=Path, help="默认写入工作区 .project-lifecycle-<task-id>.json")
     bind.add_argument("--config", help="Project TOML 配置文件")
 
     record = sub.add_parser("record", help="记录分析、方案、验证、PR 或其他生命周期产物")
@@ -338,11 +343,7 @@ def main() -> int:
     args = build_parser().parse_args()
     try:
         if args.command in ("create", "bind"):
-            state_path = args.state or (args.workdir / ".project-lifecycle.json")
             if args.command == "create":
-                marker_path = args.workdir / ".project-task.json"
-                if marker_path.exists():
-                    raise ProjectApiError(f"工作区已有任务绑定，请使用 bind，不要重复创建任务: {marker_path}")
                 api = load_config(args.config)
                 params: dict[str, Any] = {"project_id": args.project_id, "name": args.name}
                 if args.column_id:
@@ -353,6 +354,7 @@ def main() -> int:
                 task_id = int(task["id"])
             else:
                 task_id = args.task_id
+            state_path = args.state or default_state_path(args.workdir, task_id)
             state = initialize(args.project_id, task_id, args.workdir, state_path, args.config)
             result = {"projectId": args.project_id, "taskId": task_id, "stage": state["stage"], "state": str(state_path)}
         elif args.command == "record":

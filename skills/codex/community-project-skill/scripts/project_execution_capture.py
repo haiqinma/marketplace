@@ -11,7 +11,18 @@ from pathlib import Path
 from typing import Any
 
 from project_api import ProjectApiError
-from project_execution_archive import SCHEMA, attach_lifecycle, finalize_state, load_state, now, publish, redact, write_json
+from project_execution_archive import (
+    SCHEMA,
+    attach_lifecycle,
+    default_execution_output_dir,
+    default_execution_state_path,
+    finalize_state,
+    load_state,
+    now,
+    publish,
+    redact,
+    write_json,
+)
 from project_task_binding import TaskBindingError, resolve_binding
 
 
@@ -23,8 +34,27 @@ ROLE_BY_TYPE = {
 }
 
 
-def new_state(args: argparse.Namespace) -> dict[str, Any]:
+def _binding_workdir(args: argparse.Namespace, binding: dict[str, Any]) -> Path:
+    source = str(binding.get("source") or "")
+    if source not in ("arguments", "environment"):
+        return Path(source).expanduser().resolve().parent
+    root = (args.binding_root or Path.cwd()).expanduser().resolve()
+    return root.parent if root.is_file() else root
+
+
+def prepare_new_state(args: argparse.Namespace) -> dict[str, Any]:
     binding = resolve_binding(args.project_id, args.task_id, args.binding_root)
+    workdir = _binding_workdir(args, binding)
+    args.state = args.state or default_execution_state_path(workdir, binding["task_id"])
+    args.output_dir = args.output_dir or default_execution_output_dir(workdir, binding["task_id"])
+    default_lifecycle = workdir / f".project-lifecycle-{binding['task_id']}.json"
+    if args.lifecycle_file is None and default_lifecycle.is_file():
+        args.lifecycle_file = default_lifecycle
+    return binding
+
+
+def new_state(args: argparse.Namespace, binding: dict[str, Any] | None = None) -> dict[str, Any]:
+    binding = binding or prepare_new_state(args)
     return {
         "schema": SCHEMA,
         "project_id": binding["project_id"],
@@ -62,7 +92,12 @@ def normalize_event(event: dict[str, Any]) -> tuple[str, dict[str, Any], str | N
 
 
 def capture(args: argparse.Namespace) -> dict[str, Any]:
-    state = load_state(args.state) if args.state.exists() else new_state(args)
+    if args.state is not None and args.state.exists():
+        state = load_state(args.state)
+        args.output_dir = args.output_dir or Path(state["output_dir"])
+    else:
+        binding = prepare_new_state(args)
+        state = new_state(args, binding)
     event_ids = set(state.get("event_ids", []))
     source = args.input_file.open(encoding="utf-8") if args.input_file else sys.stdin
     try:
@@ -104,8 +139,8 @@ def parser() -> argparse.ArgumentParser:
     command.add_argument("--source-tool", required=True)
     command.add_argument("--model")
     command.add_argument("--execution-id", default=None)
-    command.add_argument("--state", type=Path, required=True)
-    command.add_argument("--output-dir", type=Path, required=True)
+    command.add_argument("--state", type=Path, help="默认写入绑定目录 .project-execution-<task-id>.json")
+    command.add_argument("--output-dir", type=Path, help="默认写入绑定目录 .project-execution-<task-id>/")
     command.add_argument("--lifecycle-file", type=Path, help="研发生命周期 JSON 快照")
     command.add_argument("--input-file", type=Path)
     completion = command.add_mutually_exclusive_group()

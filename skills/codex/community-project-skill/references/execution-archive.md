@@ -9,24 +9,27 @@
 ```bash
 python3 scripts/project_execution_archive.py start \
   --project-id 8 --task-id 123 --source-tool codex --model gpt-5 \
-  --state /tmp/execution.json --output-dir /tmp/execution \
-  --lifecycle-file /path/to/repository/.project-lifecycle.json
+  --state /path/to/repository/.project-execution-123.json \
+  --output-dir /path/to/repository/.project-execution-123 \
+  --lifecycle-file /path/to/repository/.project-lifecycle-123.json
 
 python3 scripts/project_execution_archive.py append \
-  --state /tmp/execution.json --role user --content "用户请求"
+  --state /path/to/repository/.project-execution-123.json --role user --content "用户请求"
 
 python3 scripts/project_execution_archive.py append \
-  --state /tmp/execution.json --record-file /tmp/tool-result.json
+  --state /path/to/repository/.project-execution-123.json --record-file /tmp/tool-result.json
 
 python3 scripts/project_execution_archive.py finalize \
-  --state /tmp/execution.json --summary-file /tmp/summary.md \
+  --state /path/to/repository/.project-execution-123.json --summary-file /tmp/summary.md \
   --result-file /tmp/result.md --incomplete --missing "平台隐藏上下文"
 
 python3 scripts/project_execution_archive.py publish \
-  --state /tmp/execution.json
+  --state /path/to/repository/.project-execution-123.json
 ```
 
 `append` 支持用户消息、助手消息、工具调用、工具结果、事件和附件引用。结构化记录使用 `--record-file` 传入 JSON；脚本会在写入状态前递归脱敏。
+
+本地执行状态和输出目录必须按任务隔离，使用 `.project-execution-<task-id>.json` 与 `.project-execution-<task-id>/`。不要让多个任务共享同一个状态文件或输出目录。
 
 ## 归档文件
 

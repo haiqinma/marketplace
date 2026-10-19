@@ -43,7 +43,7 @@ Create the default file at `~/.yeying/skills/project/config.toml`, or point `YEY
 
 Legacy JSON files are not part of the shared skill configuration contract.
 
-The Project API configuration and task binding are separate: `.project-task.json` contains only `project_id` and `task_id`, never AK/SK. The capture scripts resolve task binding from explicit arguments, `YEYING_PROJECT_ID`/`YEYING_PROJECT_TASK_ID`, or the nearest `.project-task.json`.
+The Project API configuration and task binding are separate: `.project-task-<task-id>.json` contains only `project_id` and `task_id`, never AK/SK. Each task uses isolated local files: `.project-task-<task-id>.json`, `.project-lifecycle-<task-id>.json`, `.project-execution-<task-id>.json`, and `.project-execution-<task-id>/`. The capture scripts resolve task binding from explicit arguments, `YEYING_PROJECT_ID`/`YEYING_PROJECT_TASK_ID`, or the nearest task-specific marker. If multiple markers exist, callers must select a task explicitly.
 
 Available commands:
 
@@ -66,23 +66,24 @@ python3 scripts/project_api.py download --file-id 456 --output /tmp/document.pdf
 
 # lifecycle state and gates
 python3 scripts/project_lifecycle.py bind --project-id 8 --task-id 123 --workdir /path/to/repository
-python3 scripts/project_lifecycle.py record --state /path/to/repository/.project-lifecycle.json --kind analysis --file /tmp/analysis.json --publish
-python3 scripts/project_lifecycle.py record --state /path/to/repository/.project-lifecycle.json --kind documentation --file /tmp/documentation.json --publish
-python3 scripts/project_lifecycle.py approve --state /path/to/repository/.project-lifecycle.json --by "负责人" --reference "Project 评论或会议记录引用"
-python3 scripts/project_lifecycle.py archive-link --state /path/to/repository/.project-lifecycle.json --manifest /tmp/execution/manifest.json --publish
-python3 scripts/project_lifecycle.py advance --state /path/to/repository/.project-lifecycle.json --to implementation
+python3 scripts/project_lifecycle.py record --state /path/to/repository/.project-lifecycle-123.json --kind analysis --file /tmp/analysis.json --publish
+python3 scripts/project_lifecycle.py record --state /path/to/repository/.project-lifecycle-123.json --kind documentation --file /tmp/documentation.json --publish
+python3 scripts/project_lifecycle.py approve --state /path/to/repository/.project-lifecycle-123.json --by "负责人" --reference "Project 评论或会议记录引用"
+python3 scripts/project_lifecycle.py archive-link --state /path/to/repository/.project-lifecycle-123.json --manifest /path/to/repository/.project-execution-123/manifest.json --publish
+python3 scripts/project_lifecycle.py advance --state /path/to/repository/.project-lifecycle-123.json --to implementation
 
 # Task execution archive
-python3 scripts/project_execution_archive.py start --project-id 8 --task-id 123 --source-tool codex --state /tmp/execution.json --output-dir /tmp/execution --lifecycle-file /path/to/repository/.project-lifecycle.json
-python3 scripts/project_execution_archive.py append --state /tmp/execution.json --role user --content "用户请求"
-python3 scripts/project_execution_archive.py finalize --state /tmp/execution.json --incomplete --missing "平台隐藏上下文"
-python3 scripts/project_execution_archive.py publish --state /tmp/execution.json
+python3 scripts/project_execution_archive.py start --project-id 8 --task-id 123 --source-tool codex --state /path/to/repository/.project-execution-123.json --output-dir /path/to/repository/.project-execution-123 --lifecycle-file /path/to/repository/.project-lifecycle-123.json
+python3 scripts/project_execution_archive.py append --state /path/to/repository/.project-execution-123.json --role user --content "用户请求"
+python3 scripts/project_execution_archive.py finalize --state /path/to/repository/.project-execution-123.json --incomplete --missing "平台隐藏上下文"
+python3 scripts/project_execution_archive.py publish --state /path/to/repository/.project-execution-123.json
 
 # 客户端 JSONL 自动采集桥接器
 cat events.jsonl | python3 scripts/project_execution_capture.py \
   --project-id 8 --task-id 123 --source-tool claude \
-  --state /tmp/execution.json --output-dir /tmp/execution \
-  --lifecycle-file /path/to/repository/.project-lifecycle.json \
+  --state /path/to/repository/.project-execution-123.json \
+  --output-dir /path/to/repository/.project-execution-123 \
+  --lifecycle-file /path/to/repository/.project-lifecycle-123.json \
   --incomplete --missing "客户端未提供隐藏上下文" --publish
 ```
 
@@ -131,7 +132,7 @@ All successful commands print JSON to stdout. Failures print a concise error to 
 ## Task Workflow
 
 1. Resolve or create the task. If the user gives a task ID, call `task`; otherwise list `projects` and `tasks`, or use `task-create` when the request has no existing task.
-2. Bind the repository with `project_lifecycle.py bind` or create-and-bind it with `project_lifecycle.py create`; keep `.project-task.json` and `.project-lifecycle.json` out of Git.
+2. Bind the repository with `project_lifecycle.py bind` or create-and-bind it with `project_lifecycle.py create`; keep `.project-task-*.json`, `.project-lifecycle-*.json`, `.project-execution-*.json`, and `.project-execution-*/` out of Git.
 3. Read the task title, description, content, members, tags, and recent discussion. Record the analysis and feasible solution, including scope, non-goals, risks, acceptance criteria, and test plan.
 4. Obtain explicit solution approval and advance the lifecycle gate before changing code. A verbal or hidden approval that has no traceable reference does not satisfy the gate.
 5. Inspect the local repository and perform the requested work using its own instructions and quality gates. Keep structured implementation records in the lifecycle state.
@@ -149,7 +150,7 @@ For automatic client integration, use the client-neutral JSONL bridge described 
 
 Claude Code hook payloads can be translated with `scripts/project_claude_hook.py`; Codex or other Agent JSONL can be translated with `scripts/project_codex_events.py`. These adapters do not install hooks or alter client configuration automatically. The host must explicitly register them and provide a reliable Project task binding.
 
-The capture bridge can discover `project_id` and `task_id` from explicit arguments, `YEYING_PROJECT_ID`/`YEYING_PROJECT_TASK_ID`, or the nearest `.project-task.json`. It fails closed when the binding is incomplete.
+The capture bridge can discover `project_id` and `task_id` from explicit arguments, `YEYING_PROJECT_ID`/`YEYING_PROJECT_TASK_ID`, or the nearest `.project-task-<task-id>.json`. It fails closed when the binding is incomplete or multiple task markers exist without an explicit task selection.
 
 For one-event-at-a-time Claude hooks, use `scripts/project_execution_event.py` as described in [references/claude-hooks.md](references/claude-hooks.md). It persists each event before the next hook starts and only finalizes on an explicit stop/session-end hook.
 

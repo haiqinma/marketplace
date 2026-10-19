@@ -167,14 +167,28 @@ class LifecycleTest(unittest.TestCase):
             record = lifecycle.add_record(state, "execution_archive", payload, manifest)
             self.assertEqual(record["kind"], "execution_archive")
 
-    def test_initialize_rejects_conflicting_workspace_binding(self):
+    def test_initialize_allows_parallel_task_bindings(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
-            (root / ".project-task.json").write_text(json.dumps({"project_id": 8, "task_id": 999}), encoding="utf-8")
+            (root / ".project-task-999.json").write_text(json.dumps({"project_id": 8, "task_id": 999}), encoding="utf-8")
+            with mock.patch.object(lifecycle, "load_config", return_value={"url": "https://example.invalid"}), \
+                 mock.patch.object(lifecycle, "request_api", return_value={"id": 123, "project_id": 8, "name": "task"}):
+                state_path = lifecycle.default_state_path(root, 123)
+                state = lifecycle.initialize(8, 123, root, state_path)
+            self.assertEqual(state["task_id"], 123)
+            self.assertTrue((root / ".project-task-123.json").is_file())
+            self.assertTrue((root / ".project-task-999.json").is_file())
+            self.assertEqual(state_path.name, ".project-lifecycle-123.json")
+
+    def test_initialize_rejects_conflicting_task_specific_marker(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            marker = root / ".project-task-123.json"
+            marker.write_text(json.dumps({"project_id": 8, "task_id": 999}), encoding="utf-8")
             with mock.patch.object(lifecycle, "load_config", return_value={"url": "https://example.invalid"}), \
                  mock.patch.object(lifecycle, "request_api", return_value={"id": 123, "project_id": 8, "name": "task"}):
                 with self.assertRaises(lifecycle.ProjectApiError):
-                    lifecycle.initialize(8, 123, root, root / ".project-lifecycle.json")
+                    lifecycle.initialize(8, 123, root, lifecycle.default_state_path(root, 123))
 
 
 if __name__ == "__main__":

@@ -11,12 +11,17 @@ from pathlib import Path
 
 from project_api import ProjectApiError
 from project_execution_archive import attach_lifecycle, finalize_state, load_state, now, publish, write_json
-from project_execution_capture import new_state, normalize_event
+from project_execution_capture import new_state, normalize_event, prepare_new_state
 from project_task_binding import TaskBindingError
 
 
 def append_event(args: argparse.Namespace) -> dict[str, object]:
-    state = load_state(args.state) if args.state.exists() else new_state(args)
+    if args.state is not None and args.state.exists():
+        state = load_state(args.state)
+        args.output_dir = args.output_dir or Path(state["output_dir"])
+    else:
+        binding = prepare_new_state(args)
+        state = new_state(args, binding)
     payload = json.load(sys.stdin)
     if not isinstance(payload, dict):
         raise ProjectApiError("事件必须是 JSON 对象")
@@ -51,8 +56,8 @@ def parser() -> argparse.ArgumentParser:
     command.add_argument("--source-tool", required=True)
     command.add_argument("--model")
     command.add_argument("--execution-id")
-    command.add_argument("--state", type=Path, required=True)
-    command.add_argument("--output-dir", type=Path, required=True)
+    command.add_argument("--state", type=Path, help="默认写入绑定目录 .project-execution-<task-id>.json")
+    command.add_argument("--output-dir", type=Path, help="默认写入绑定目录 .project-execution-<task-id>/")
     command.add_argument("--lifecycle-file", type=Path, help="研发生命周期 JSON 快照")
     command.add_argument("--finalize", action="store_true")
     command.add_argument("--complete", action="store_true")

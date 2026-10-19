@@ -2,18 +2,21 @@
 
 Claude Code Hook 每次以 JSON 通过 stdin 调用命令。把适配器和单事件追加器串起来，可以在不修改 Project 业务代码的情况下持久化可见事件。
 
-下面的命令路径需要替换为当前安装位置；`PROJECT_ROOT` 应是包含 `.project-task.json` 的工作区：
+下面的命令路径需要替换为当前安装位置；`PROJECT_ROOT` 应是包含 `.project-task-<task-id>.json` 的工作区。Hook 必须获得明确的 `TASK_ID`，确保并行任务写入不同状态：
 
 ```bash
 PROJECT_ROOT=/workspace/project
 SKILL=/path/to/community-project-skill
-STATE="$PROJECT_ROOT/.project-execution.json"
-ARCHIVE="$PROJECT_ROOT/.project-execution"
+TASK_ID=123
+STATE="$PROJECT_ROOT/.project-execution-$TASK_ID.json"
+ARCHIVE="$PROJECT_ROOT/.project-execution-$TASK_ID"
+LIFECYCLE="$PROJECT_ROOT/.project-lifecycle-$TASK_ID.json"
 
 python3 "$SKILL/scripts/project_claude_hook.py" \
   | python3 "$SKILL/scripts/project_execution_event.py" \
-    --source-tool claude --state "$STATE" --output-dir "$ARCHIVE" \
-    --binding-root "$PROJECT_ROOT"
+    --task-id "$TASK_ID" --source-tool claude \
+    --state "$STATE" --output-dir "$ARCHIVE" \
+    --lifecycle-file "$LIFECYCLE" --binding-root "$PROJECT_ROOT"
 ```
 
 建议将上述命令注册到 `UserPromptSubmit`、`PreToolUse`、`PostToolUse` 和 `Notification`。在 `Stop` 或 `SessionEnd` Hook 中使用相同命令并追加：
@@ -22,7 +25,7 @@ python3 "$SKILL/scripts/project_claude_hook.py" \
 --finalize --incomplete --missing "Claude Code 未提供隐藏上下文"
 ```
 
-只有在用户明确允许自动上传且 Project 凭据已通过 `project_api.py` 的既有配置提供时，才在结束 Hook 命令上追加 `--publish`。没有 `.project-task.json`、环境变量或显式 ID 时，追加器会失败关闭。
+只有在用户明确允许自动上传且 Project 凭据已通过 `project_api.py` 的既有配置提供时，才在结束 Hook 命令上追加 `--publish`。没有 `.project-task-<task-id>.json`、环境变量或显式 ID 时，追加器会失败关闭；存在多个绑定且未显式选择任务时同样失败关闭。
 
 ## 重要边界
 

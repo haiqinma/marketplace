@@ -46,6 +46,14 @@ def now() -> str:
     return dt.datetime.now(dt.timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z")
 
 
+def default_execution_state_path(workdir: Path, task_id: int) -> Path:
+    return workdir / f".project-execution-{task_id}.json"
+
+
+def default_execution_output_dir(workdir: Path, task_id: int) -> Path:
+    return workdir / f".project-execution-{task_id}"
+
+
 def redact(value: Any, key: str = "") -> Any:
     """Remove credentials from nested records while preserving useful structure."""
     normalized_key = re.sub(r"([a-z0-9])([A-Z])", r"\1_\2", str(key)).replace("-", "_").lower()
@@ -335,8 +343,8 @@ def build_parser() -> argparse.ArgumentParser:
     start.add_argument("--model")
     start.add_argument("--execution-id")
     start.add_argument("--lifecycle-file", type=Path, help="研发生命周期 JSON 快照")
-    start.add_argument("--state", type=Path, required=True)
-    start.add_argument("--output-dir", type=Path, required=True)
+    start.add_argument("--state", type=Path, help="默认写入当前目录 .project-execution-<task-id>.json")
+    start.add_argument("--output-dir", type=Path, help="默认写入当前目录 .project-execution-<task-id>/")
 
     append = sub.add_parser("append", help="追加一条可获得的执行记录")
     append.add_argument("--state", type=Path, required=True)
@@ -370,6 +378,13 @@ def main() -> int:
     args = build_parser().parse_args()
     try:
         if args.command == "start":
+            workdir = Path.cwd()
+            state_path = args.state or default_execution_state_path(workdir, args.task_id)
+            output_dir = args.output_dir or default_execution_output_dir(workdir, args.task_id)
+            lifecycle_file = args.lifecycle_file
+            default_lifecycle = workdir / f".project-lifecycle-{args.task_id}.json"
+            if lifecycle_file is None and default_lifecycle.is_file():
+                lifecycle_file = default_lifecycle
             state = {
                 "schema": SCHEMA,
                 "project_id": args.project_id,
@@ -383,14 +398,14 @@ def main() -> int:
                 "missing": ["execution completion"],
                 "records": [],
                 "attachments": [],
-                "output_dir": str(args.output_dir),
-                "lifecycle_file": str(args.lifecycle_file) if args.lifecycle_file else None,
+                "output_dir": str(output_dir),
+                "lifecycle_file": str(lifecycle_file) if lifecycle_file else None,
                 "commits": [],
                 "pull_requests": [],
                 "verification": [],
             }
-            write_json(args.state, state)
-            print(json.dumps({"executionId": state["execution_id"], "state": str(args.state)}, ensure_ascii=False, indent=2))
+            write_json(state_path, state)
+            print(json.dumps({"executionId": state["execution_id"], "state": str(state_path)}, ensure_ascii=False, indent=2))
         elif args.command == "append":
             state = load_state(args.state)
             record = redact(content_from_args(args))
