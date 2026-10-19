@@ -6,7 +6,6 @@ from __future__ import annotations
 import argparse
 import base64
 import json
-import os
 import re
 import subprocess
 import time
@@ -16,8 +15,13 @@ import urllib.request
 from dataclasses import dataclass
 from typing import Any
 
+from github_config import ConfigError, Settings, load
+
 
 API_VERSION = "2022-11-28"
+_ORIGIN_TOKEN = ""
+_UPSTREAM_TOKEN = ""
+_CONFIG_PATH = "~/.yeying/skills/github/config.toml"
 
 
 @dataclass
@@ -51,15 +55,34 @@ def parse_repo(remote_url: str) -> Repo:
     raise SystemExit(f"Unsupported GitHub remote URL: {remote_url}")
 
 
+def configure_credentials(settings: Settings, *, require_upstream: bool) -> None:
+    global _ORIGIN_TOKEN, _UPSTREAM_TOKEN, _CONFIG_PATH
+    missing = []
+    if not settings.origin_token:
+        missing.append("origin_token")
+    if require_upstream and not settings.upstream_token:
+        missing.append("upstream_token")
+    if missing:
+        raise SystemExit(
+            "GitHub config missing: "
+            + ", ".join(missing)
+            + f"; configure them in {settings.config_path}"
+        )
+    _ORIGIN_TOKEN = settings.origin_token
+    _UPSTREAM_TOKEN = settings.upstream_token
+    _CONFIG_PATH = str(settings.config_path)
+
+
 def token() -> str:
-    value = os.environ.get("GH_TOKEN") or os.environ.get("GITHUB_TOKEN")
-    if not value:
-        raise SystemExit("Set GH_TOKEN or GITHUB_TOKEN with repo write access.")
-    return value
+    if not _ORIGIN_TOKEN:
+        raise SystemExit(f"GitHub origin_token is not loaded from {_CONFIG_PATH}.")
+    return _ORIGIN_TOKEN
 
 
 def upstream_token() -> str:
-    return os.environ.get("UPSTREAM_TOKEN") or token()
+    if not _UPSTREAM_TOKEN:
+        raise SystemExit(f"GitHub upstream_token is not loaded from {_CONFIG_PATH}.")
+    return _UPSTREAM_TOKEN
 
 
 def gh(
@@ -290,6 +313,7 @@ def ensure_pull_request(
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--config")
     parser.add_argument("--remote", default="origin")
     parser.add_argument("--branch", default=None)
     parser.add_argument("--pr", action="store_true", help="Ensure an open PR after pushing.")
@@ -302,6 +326,12 @@ def main() -> int:
     parser.add_argument("--no-update-tracking-ref", action="store_true")
     parser.add_argument("--no-align-local-ref", action="store_true")
     args = parser.parse_args()
+
+    try:
+        settings = load(args.config, "api")
+    except ConfigError as exc:
+        raise SystemExit(str(exc)) from exc
+    configure_credentials(settings, require_upstream=args.pr)
 
     if args.pr and not (args.pr_title or "").strip():
         raise SystemExit("--pr-title is required with --pr so the complete delivery has an accurate title.")

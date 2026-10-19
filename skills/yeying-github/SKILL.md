@@ -60,6 +60,6 @@ python3 scripts/github_delivery.py --mode api --allow-dirty \
 
 ## Permission Boundary
 
-API mode uses `GH_TOKEN` or `GITHUB_TOKEN` for the personal fork and `UPSTREAM_TOKEN` for PR operations when present. The PR token must be able to read both private head and base repositories. A fine-grained token bound to only one resource owner cannot create a PR across two private owners; use one credential that can read both refs and create pull requests on the upstream repository.
+Read `origin_token` and `upstream_token` only from `~/.yeying/skills/github/config.toml` (or the file selected with `--config`/`YEYING_GITHUB_CONFIG`). Do not use ambient `GH_TOKEN`, `GITHUB_TOKEN`, or `UPSTREAM_TOKEN` as configuration. A config containing tokens must be mode `0600` or stricter. The upstream token must be able to read both private head and base repositories; a fine-grained token bound to only one resource owner cannot create a PR across two private owners.
 
 Never print tokens, add collaborators, alter repository visibility, force-update refs, merge a PR, or change branch protection unless the user explicitly requests that separate operation.

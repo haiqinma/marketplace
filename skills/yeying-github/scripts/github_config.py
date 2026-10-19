@@ -5,6 +5,7 @@ from __future__ import annotations
 import ast
 import os
 import re
+import stat
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -31,6 +32,8 @@ class Settings:
     mode: str
     sync_script: str
     pr_script: str
+    origin_token: str
+    upstream_token: str
     config_path: Path
 
 
@@ -68,6 +71,7 @@ def _read_config(path: Path, required: bool) -> dict[str, object]:
     if not path.is_file():
         raise ConfigError(f"GitHub config path is not a file: {path}")
     try:
+        mode = stat.S_IMODE(path.stat().st_mode)
         raw = path.read_bytes()
         if tomllib is not None:
             data = tomllib.loads(raw.decode("utf-8"))
@@ -80,6 +84,8 @@ def _read_config(path: Path, required: bool) -> dict[str, object]:
     section = data.get("github", {}) if isinstance(data, dict) else {}
     if not isinstance(section, dict):
         raise ConfigError("[github] must be a TOML table")
+    if (section.get("origin_token") or section.get("upstream_token")) and mode & 0o077:
+        raise ConfigError(f"GitHub config containing tokens must be mode 0600 or stricter: {path}")
     return section
 
 
@@ -99,6 +105,15 @@ def load(explicit_path: str | Path | None = None, mode_override: str | None = No
 
     sync_script = str(section.get("sync_script", "scripts/sync.sh")).strip()
     pr_script = str(section.get("pr_script", "scripts/pr.sh")).strip()
+    origin_token = str(section.get("origin_token", "")).strip()
+    upstream_token = str(section.get("upstream_token", "")).strip()
     if not sync_script or not pr_script:
         raise ConfigError("sync_script and pr_script must be non-empty paths")
-    return Settings(mode=mode, sync_script=sync_script, pr_script=pr_script, config_path=path)
+    return Settings(
+        mode=mode,
+        sync_script=sync_script,
+        pr_script=pr_script,
+        origin_token=origin_token,
+        upstream_token=upstream_token,
+        config_path=path,
+    )

@@ -10,9 +10,20 @@ SCRIPTS = Path(__file__).resolve().parents[1] / "scripts"
 sys.path.insert(0, str(SCRIPTS))
 
 import github_delivery  # noqa: E402
+from github_config import Settings  # noqa: E402
 
 
 class GitHubDeliveryTests(unittest.TestCase):
+    def settings(self) -> Settings:
+        return Settings(
+            mode="api",
+            sync_script="scripts/sync.sh",
+            pr_script="scripts/pr.sh",
+            origin_token="origin-secret",
+            upstream_token="upstream-secret",
+            config_path=Path("/secure/config.toml"),
+        )
+
     def test_parse_github_repo(self) -> None:
         self.assertEqual(
             github_delivery.parse_github_repo("git@github.com:liuppx/marketplace.git"),
@@ -36,18 +47,38 @@ class GitHubDeliveryTests(unittest.TestCase):
 
     def test_api_command_carries_explicit_title(self) -> None:
         args = argparse.Namespace(dry_run=True, allow_dirty=True)
-        command = github_delivery.api_command(args, "docs: accurate title", "body")
+        command = github_delivery.api_command(args, self.settings(), "docs: accurate title", "body")
         self.assertIn("--pr-title", command)
         self.assertEqual(command[command.index("--pr-title") + 1], "docs: accurate title")
+        self.assertEqual(command[command.index("--config") + 1], "/secure/config.toml")
         self.assertIn("--dry-run", command)
         self.assertIn("--allow-dirty", command)
+
+    def test_subprocess_env_replaces_ambient_tokens(self) -> None:
+        with mock.patch.dict(
+            github_delivery.os.environ,
+            {
+                "GH_TOKEN": "ambient-gh",
+                "GITHUB_TOKEN": "ambient-github",
+                "UPSTREAM_TOKEN": "ambient-upstream",
+                "KEEP": "yes",
+            },
+            clear=True,
+        ):
+            clean = github_delivery.subprocess_env()
+            pr = github_delivery.subprocess_env("configured-upstream")
+        self.assertEqual(clean, {"KEEP": "yes"})
+        self.assertEqual(pr, {"KEEP": "yes", "GH_TOKEN": "configured-upstream"})
 
     def test_existing_git_pr_title_is_corrected(self) -> None:
         existing = {"number": 12, "url": "https://github.com/yeying-community/repo/pull/12", "title": "old"}
         with mock.patch.object(
             github_delivery, "find_open_pr", return_value=existing
         ), mock.patch.object(github_delivery, "run") as run:
-            github_delivery.sync_git_pr_title("yeying-community/repo", "liuppx", "feat: accurate title")
+            env = {"GH_TOKEN": "configured-upstream"}
+            github_delivery.sync_git_pr_title(
+                "yeying-community/repo", "liuppx", "feat: accurate title", env
+            )
         run.assert_called_once_with(
             [
                 "gh",
@@ -58,7 +89,8 @@ class GitHubDeliveryTests(unittest.TestCase):
                 "yeying-community/repo",
                 "--title",
                 "feat: accurate title",
-            ]
+            ],
+            env=env,
         )
 
 

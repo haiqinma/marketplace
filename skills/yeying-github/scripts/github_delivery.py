@@ -17,6 +17,7 @@ from github_config import ConfigError, Settings, load
 
 
 GENERIC_TITLES = {"change", "changes", "misc", "pull request", "sync", "update", "updates"}
+TOKEN_ENV_KEYS = ("GH_TOKEN", "GITHUB_TOKEN", "UPSTREAM_TOKEN")
 
 
 def git_output(*args: str) -> str:
@@ -32,6 +33,15 @@ def git_output(*args: str) -> str:
 
 def run(command: list[str], *, env: dict[str, str] | None = None) -> None:
     subprocess.run(command, check=True, env=env)
+
+
+def subprocess_env(gh_token: str | None = None) -> dict[str, str]:
+    env = os.environ.copy()
+    for name in TOKEN_ENV_KEYS:
+        env.pop(name, None)
+    if gh_token:
+        env["GH_TOKEN"] = gh_token
+    return env
 
 
 def parse_github_repo(remote_url: str) -> tuple[str, str]:
@@ -108,10 +118,12 @@ def read_body(args: argparse.Namespace, title: str) -> str:
     return default_body(title)
 
 
-def api_command(args: argparse.Namespace, title: str, body: str) -> list[str]:
+def api_command(args: argparse.Namespace, settings: Settings, title: str, body: str) -> list[str]:
     command = [
         sys.executable,
         str(Path(__file__).with_name("github_api_push.py")),
+        "--config",
+        str(settings.config_path.expanduser().resolve()),
         "--remote",
         "origin",
         "--branch",
@@ -146,7 +158,9 @@ def print_git_plan(sync_script: Path, pr_script: Path, skip_sync: bool, title: s
         print("dry run: repository pr.sh is missing; would use gh pr list/create/edit fallback")
 
 
-def find_open_pr(upstream_repo: str, origin_owner: str) -> dict[str, object] | None:
+def find_open_pr(
+    upstream_repo: str, origin_owner: str, env: dict[str, str]
+) -> dict[str, object] | None:
     result = subprocess.run(
         [
             "gh",
@@ -168,28 +182,36 @@ def find_open_pr(upstream_repo: str, origin_owner: str) -> dict[str, object] | N
         check=True,
         stdout=subprocess.PIPE,
         text=True,
+        env=env,
     )
     prs = json.loads(result.stdout)
     return prs[0] if prs else None
 
 
-def sync_git_pr_title(upstream_repo: str, origin_owner: str, title: str) -> None:
-    pr = find_open_pr(upstream_repo, origin_owner)
+def sync_git_pr_title(
+    upstream_repo: str, origin_owner: str, title: str, env: dict[str, str]
+) -> None:
+    pr = find_open_pr(upstream_repo, origin_owner, env)
     if not pr:
         raise SystemExit("PR command completed but no open origin/main -> upstream/main PR was found.")
     if pr.get("title") != title:
-        run(["gh", "pr", "edit", str(pr["number"]), "--repo", upstream_repo, "--title", title])
+        run(
+            ["gh", "pr", "edit", str(pr["number"]), "--repo", upstream_repo, "--title", title],
+            env=env,
+        )
         print(f"updated PR title: {pr['url']}")
     else:
         print(f"existing PR title is accurate: {pr['url']}")
 
 
-def ensure_pr_with_gh(upstream_repo: str, origin_owner: str, title: str, body: str) -> None:
+def ensure_pr_with_gh(
+    upstream_repo: str, origin_owner: str, title: str, body: str, env: dict[str, str]
+) -> None:
     if shutil.which("gh") is None:
         raise SystemExit("scripts/pr.sh is missing and gh is unavailable for the PR fallback.")
-    existing = find_open_pr(upstream_repo, origin_owner)
+    existing = find_open_pr(upstream_repo, origin_owner, env)
     if existing:
-        sync_git_pr_title(upstream_repo, origin_owner, title)
+        sync_git_pr_title(upstream_repo, origin_owner, title, env)
         return
     run(
         [
@@ -206,9 +228,10 @@ def ensure_pr_with_gh(upstream_repo: str, origin_owner: str, title: str, body: s
             title,
             "--body",
             body,
-        ]
+        ],
+        env=env,
     )
-    sync_git_pr_title(upstream_repo, origin_owner, title)
+    sync_git_pr_title(upstream_repo, origin_owner, title, env)
 
 
 def deliver_git(
@@ -221,6 +244,8 @@ def deliver_git(
 ) -> None:
     if args.allow_dirty:
         raise SystemExit("--allow-dirty is available only in api mode; repository sync/pr scripts require a clean worktree.")
+    if not settings.upstream_token:
+        raise SystemExit(f"GitHub config missing upstream_token: {settings.config_path}")
     sync_script = resolve_script(root, settings.sync_script)
     pr_script = resolve_script(root, settings.pr_script)
     if not args.skip_sync and not sync_script.is_file():
@@ -234,14 +259,14 @@ def deliver_git(
         return
 
     if not args.skip_sync:
-        sync_env = os.environ.copy()
+        sync_env = subprocess_env()
         sync_env["AUTO_PUSH"] = "true"
         run(["bash", str(sync_script)], env=sync_env)
 
     body = read_body(args, title)
     origin_owner = origin_repo.split("/", 1)[0]
+    pr_env = subprocess_env(settings.upstream_token)
     if pr_script.is_file():
-        pr_env = os.environ.copy()
         pr_env.update(
             {
                 "INTERACTIVE": "false",
@@ -252,11 +277,11 @@ def deliver_git(
             }
         )
         run(["bash", str(pr_script), "main"], env=pr_env)
-        sync_git_pr_title(upstream_repo, origin_owner, title)
+        sync_git_pr_title(upstream_repo, origin_owner, title, pr_env)
     else:
         if args.skip_sync:
-            run(["git", "push", "origin", "main"])
-        ensure_pr_with_gh(upstream_repo, origin_owner, title, body)
+            run(["git", "push", "origin", "main"], env=subprocess_env())
+        ensure_pr_with_gh(upstream_repo, origin_owner, title, body, pr_env)
 
 
 def parse_args() -> argparse.Namespace:
@@ -290,7 +315,7 @@ def main() -> int:
 
     if settings.mode == "api":
         body = read_body(args, title)
-        run(api_command(args, title, body))
+        run(api_command(args, settings, title, body), env=subprocess_env())
     else:
         deliver_git(args, settings, root, origin_repo, upstream_repo, title)
     return 0
