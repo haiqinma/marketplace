@@ -56,6 +56,7 @@ yeying-<scope>
 | --- | --- |
 | Project 任务协作和文件柜同步 | `yeying-project` |
 | Warehouse 对模型开放资料访问工具 | `yeying-warehouse` |
+| 个人 main 发布并向社区 main 提交 PR | `yeying-github` |
 | Router 模型渠道、额度和计量治理 | `yeying-router` |
 | Knowledge 资料加工、记忆和检索接入 | `yeying-knowledge` |
 | Node 应用、Tool、Skill、Agent 发布目录 | `yeying-node` |
@@ -69,6 +70,7 @@ yeying-<scope>
 | --- | --- |
 | `yeying-project` | 通过 Project 标准 API 管理研发任务生命周期、文档收口、摘要归档并同步文件柜文档 |
 | `yeying-warehouse` | 按统一契约推进 Warehouse Tool 化、MCP 接入和 Agent 编排 |
+| `yeying-github` | 在 API 与仓库 Git 脚本之间切换，将个人 `main` 发布到 `origin/main` 并复用或创建面向社区 `upstream/main` 的 PR |
 
 ## 维护规则
 
