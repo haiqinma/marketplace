@@ -26,6 +26,7 @@
 ```bash
 python3 scripts/project_lifecycle.py bind \
   --project-id 8 --task-id 123 --workdir /path/to/repository \
+  --source-tool codex --model "<model-id>" \
   --config ~/.yeying/skills/project/config.toml
 ```
 
@@ -127,13 +128,13 @@ stop
 
 ```bash
 python3 scripts/project_execution_archive.py start \
-  --project-id 8 --task-id 123 --source-tool codex \
+  --project-id 8 --task-id 123 --source-tool codex --model "<model-id>" \
   --state /path/to/repository/.project-execution-123.json \
   --output-dir /path/to/repository/.project-execution-123 \
   --lifecycle-file /path/to/repository/.project-lifecycle-123.json
 ```
 
-`finalize` 会把生命周期快照、仓库/commit/PR/验证元数据和会话记录写入 `transcript.json`、`transcript.md` 与 `manifest.json`。归档只包含宿主实际暴露的公开事件；隐藏系统提示词、隐藏推理和未暴露的内部工具轨迹必须标记在 `missing` 中，不得猜测补写。
+`finalize` 会把生命周期快照、仓库/commit/PR/验证元数据、结构化 Agent/模型上下文和会话记录写入 `transcript.json`、`transcript.md` 与 `manifest.json`。模型 ID 必须来自宿主明确输入或公开事件，不得根据执行工具猜测；拿不到时保留 `model_missing_reason`。显式模型是 `primary`，事件中的其他模型是 `participant`，finalize 后模型集合被冻结。归档只包含宿主实际暴露的公开事件；隐藏系统提示词、隐藏推理和未暴露的内部工具轨迹必须标记在 `missing` 中，不得猜测补写。
 
 归档发布后，用 `archive-link` 校验 manifest 中每个文件的 SHA-256，并自动生成审计记录：
 

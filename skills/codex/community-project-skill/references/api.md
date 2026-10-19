@@ -26,13 +26,15 @@ Sort GET query parameters by name and encode with RFC 3986 rules. Array paramete
 | `tasks` | `GET /api/project/task/lists` | 项目范围 |
 | `task-create` | `POST /api/project/task/add` | 项目范围；需要任务创建权限 |
 | `task` | `GET /api/project/task/one` 等 | 项目范围 |
-| `comment` | `POST /api/dialog/msg/sendtext` | 项目范围；传入 `--update-id` 时编辑当前用户的指定消息 |
+| `comment` | `POST /api/dialog/msg/sendtext` | 项目范围；`--model` 或 `YEYING_AGENT_MODEL` 作为 `model_name`；传入 `--update-id` 时编辑当前用户的指定消息 |
 | `update` | `POST /api/project/task/update` | 项目范围 |
 | `status` | `POST /api/project/task/update` | 项目范围 |
 | `file-info` | `GET /api/project/task/filedetail` | 项目范围 |
 | `download` | `GET /api/project/task/filedown` | 项目范围 |
 
 The server treats the token as its owner's signed authentication method and reuses the same business permissions as the Web API. It additionally verifies token project bindings, current project membership, active user state, and task visibility.
+
+`model_name` is provenance metadata for the task discussion. Send only the real active model ID exposed by the host; never infer it from `source_tool`. When the host does not expose a model, omit `model_name` and retain `model_missing_reason` in the execution archive. Internal deployment aliases should follow the same redaction and Project access boundary as other execution metadata.
 
 ## File Cabinet Endpoints
 

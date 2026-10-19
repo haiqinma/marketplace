@@ -10,6 +10,13 @@ import uuid
 from pathlib import Path
 from typing import Any
 
+from project_agent_context import (
+    add_agent_arguments,
+    context_from_args,
+    event_agent_context,
+    merge_state_agent_context,
+    primary_model,
+)
 from project_api import ProjectApiError
 from project_execution_archive import (
     SCHEMA,
@@ -55,14 +62,16 @@ def prepare_new_state(args: argparse.Namespace) -> dict[str, Any]:
 
 def new_state(args: argparse.Namespace, binding: dict[str, Any] | None = None) -> dict[str, Any]:
     binding = binding or prepare_new_state(args)
+    agent = context_from_args(args, missing_reason="host did not expose the active model")
     return {
         "schema": SCHEMA,
         "project_id": binding["project_id"],
         "task_id": binding["task_id"],
         "binding_source": binding["source"],
         "execution_id": args.execution_id or str(uuid.uuid4()),
-        "source_tool": args.source_tool,
-        "model": args.model,
+        "source_tool": agent.get("source_tool") or args.source_tool,
+        "model": primary_model(agent),
+        "agent": agent,
         "started_at": now(),
         "status": "running",
         "complete": False,
@@ -95,6 +104,11 @@ def capture(args: argparse.Namespace) -> dict[str, Any]:
     if args.state is not None and args.state.exists():
         state = load_state(args.state)
         args.output_dir = args.output_dir or Path(state["output_dir"])
+        merge_state_agent_context(
+            state,
+            context_from_args(args),
+            locked=bool(state.get("finalized_at")),
+        )
     else:
         binding = prepare_new_state(args)
         state = new_state(args, binding)
@@ -110,6 +124,11 @@ def capture(args: argparse.Namespace) -> dict[str, Any]:
                 raise ProjectApiError(f"第 {line_number} 行不是有效 JSON") from exc
             if not isinstance(event, dict):
                 raise ProjectApiError(f"第 {line_number} 行必须是 JSON 对象")
+            merge_state_agent_context(
+                state,
+                event_agent_context(event),
+                locked=bool(state.get("finalized_at")),
+            )
             _, record, event_id = normalize_event(event)
             if event_id and event_id in event_ids:
                 continue
@@ -136,8 +155,7 @@ def parser() -> argparse.ArgumentParser:
     command.add_argument("--project-id", type=int)
     command.add_argument("--task-id", type=int)
     command.add_argument("--binding-root", type=Path, help="任务绑定文件搜索起点，默认当前目录")
-    command.add_argument("--source-tool", required=True)
-    command.add_argument("--model")
+    add_agent_arguments(command, include_source_tool=True, source_tool_required=True)
     command.add_argument("--execution-id", default=None)
     command.add_argument("--state", type=Path, help="默认写入绑定目录 .project-execution-<task-id>.json")
     command.add_argument("--output-dir", type=Path, help="默认写入绑定目录 .project-execution-<task-id>/")

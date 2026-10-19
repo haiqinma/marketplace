@@ -17,6 +17,7 @@ import urllib.request
 from pathlib import Path
 from typing import Any
 
+from project_agent_context import ENV_MODEL, build_agent_context, primary_model
 from project_config import ConfigError, load as load_project_config
 
 
@@ -268,6 +269,7 @@ def build_parser() -> argparse.ArgumentParser:
     comment = subparsers.add_parser("comment", help="追加任务评论")
     comment.add_argument("--task-id", type=int, required=True)
     comment.add_argument("--update-id", type=int, help="编辑当前用户发送的指定消息")
+    comment.add_argument("--model", help=f"当前主模型 ID；也可使用 {ENV_MODEL}")
     content = comment.add_mutually_exclusive_group(required=True)
     content.add_argument("--content")
     content.add_argument("--content-file", type=Path)
@@ -406,6 +408,9 @@ def main() -> int:
             }
             if args.update_id:
                 params["update_id"] = args.update_id
+            model_name = primary_model(build_agent_context(model=args.model))
+            if model_name:
+                params["model_name"] = model_name
             data = request_api(config, "POST", "/api/dialog/msg/sendtext", params)
         elif args.command == "update":
             params = {"task_id": args.task_id}

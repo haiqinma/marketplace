@@ -9,6 +9,7 @@ import sys
 import uuid
 from pathlib import Path
 
+from project_agent_context import add_agent_arguments, context_from_args, event_agent_context, merge_state_agent_context
 from project_api import ProjectApiError
 from project_execution_archive import attach_lifecycle, finalize_state, load_state, now, publish, write_json
 from project_execution_capture import new_state, normalize_event, prepare_new_state
@@ -19,12 +20,22 @@ def append_event(args: argparse.Namespace) -> dict[str, object]:
     if args.state is not None and args.state.exists():
         state = load_state(args.state)
         args.output_dir = args.output_dir or Path(state["output_dir"])
+        merge_state_agent_context(
+            state,
+            context_from_args(args),
+            locked=bool(state.get("finalized_at")),
+        )
     else:
         binding = prepare_new_state(args)
         state = new_state(args, binding)
     payload = json.load(sys.stdin)
     if not isinstance(payload, dict):
         raise ProjectApiError("事件必须是 JSON 对象")
+    merge_state_agent_context(
+        state,
+        event_agent_context(payload),
+        locked=bool(state.get("finalized_at")),
+    )
     _, record, event_id = normalize_event(payload)
     event_ids = set(state.get("event_ids", []))
     appended = not event_id or event_id not in event_ids
@@ -53,8 +64,7 @@ def parser() -> argparse.ArgumentParser:
     command.add_argument("--project-id", type=int)
     command.add_argument("--task-id", type=int)
     command.add_argument("--binding-root", type=Path)
-    command.add_argument("--source-tool", required=True)
-    command.add_argument("--model")
+    add_agent_arguments(command, include_source_tool=True, source_tool_required=True)
     command.add_argument("--execution-id")
     command.add_argument("--state", type=Path, help="默认写入绑定目录 .project-execution-<task-id>.json")
     command.add_argument("--output-dir", type=Path, help="默认写入绑定目录 .project-execution-<task-id>/")

@@ -11,6 +11,14 @@ import sys
 from pathlib import Path
 from typing import Any
 
+from project_agent_context import (
+    add_agent_arguments,
+    build_agent_context,
+    context_from_args,
+    ensure_state_agent_context,
+    merge_state_agent_context,
+    primary_model,
+)
 from project_api import ProjectApiError, load_config, markdown_to_task_html, request_api
 from project_execution_archive import redact
 from project_task_binding import task_marker_name
@@ -76,7 +84,14 @@ def default_state_path(workdir: Path, task_id: int) -> Path:
     return workdir / f".project-lifecycle-{task_id}.json"
 
 
-def initialize(project_id: int, task_id: int, workdir: Path, state_path: Path, config_path: str | Path | None = None) -> dict[str, Any]:
+def initialize(
+    project_id: int,
+    task_id: int,
+    workdir: Path,
+    state_path: Path,
+    config_path: str | Path | None = None,
+    agent: dict[str, Any] | None = None,
+) -> dict[str, Any]:
     config = load_config(config_path)
     task = request_api(config, "GET", "/api/project/task/one", {"task_id": task_id})
     task_project_id = int(task.get("project_id") or 0)
@@ -95,6 +110,8 @@ def initialize(project_id: int, task_id: int, workdir: Path, state_path: Path, c
         existing_state = load_state(state_path)
         if int(existing_state.get("project_id") or 0) != project_id or int(existing_state.get("task_id") or 0) != task_id:
             raise ProjectApiError(f"生命周期状态已绑定其他 Project 任务: {state_path}")
+        merge_state_agent_context(existing_state, agent)
+        write_json(state_path, existing_state)
         return existing_state
     state = {
         "schema": SCHEMA,
@@ -105,6 +122,7 @@ def initialize(project_id: int, task_id: int, workdir: Path, state_path: Path, c
         "created_at": now(),
         "updated_at": now(),
         "approval": None,
+        "agent": agent or build_agent_context(model_missing_reason="host did not expose the active model"),
         "records": [],
         "history": [{"stage": "intake", "at": now()}],
     }
@@ -135,6 +153,15 @@ def link_archive(state: dict[str, Any], manifest_path: Path) -> dict[str, Any]:
             raise ProjectApiError(f"归档文件摘要不匹配: {name}")
     payload = {
         "execution_id": manifest.get("executionId"),
+        "source_tool": manifest.get("sourceTool"),
+        "model": manifest.get("model"),
+        "agent": manifest.get("agent") or build_agent_context(
+            source_tool=manifest.get("sourceTool"),
+            model=manifest.get("model"),
+            model_source="manifest",
+            model_missing_reason="archive manifest did not include a model",
+            use_environment=False,
+        ),
         "manifest_sha256": hashlib.sha256(manifest_path.read_bytes()).hexdigest(),
         "complete": bool(manifest.get("complete")),
         "missing": manifest.get("missing", []),
@@ -264,7 +291,11 @@ def record_summary(kind: str, data: dict[str, Any]) -> str:
     if kind == "pull_request":
         return f"**交付**：[{data.get('branch', '')}]({data.get('url', '')})\n\n**Commit**：`{data.get('commit_sha', '')}`"
     if kind == "execution_archive":
-        return f"**执行归档**：`{data.get('execution_id', '')}`，完整：`{str(data.get('complete', False)).lower()}`"
+        model_name = primary_model(data.get("agent")) or data.get("model") or "unknown"
+        return (
+            f"**执行归档**：`{data.get('execution_id', '')}`，完整：`{str(data.get('complete', False)).lower()}`\n\n"
+            f"**执行工具**：`{data.get('source_tool') or 'unknown'}`；**主模型**：`{model_name}`"
+        )
     return f"**记录类型**：`{kind}`"
 
 
@@ -279,11 +310,16 @@ def publish_record(state: dict[str, Any], record: dict[str, Any], config_path: s
     marker = f"[lifecycle:{state['task_id']}:{record['kind']}:{record['sha256'][:16]}]"
     if marker in text:
         return False
-    request_api(api, "POST", "/api/dialog/msg/sendtext", {
+    agent = record["data"].get("agent") if record["kind"] == "execution_archive" else state.get("agent")
+    model_name = primary_model(agent) or record["data"].get("model")
+    params = {
         "dialog_id": dialog_id,
         "text": render_record_comment(state, record),
         "text_type": "md",
-    })
+    }
+    if model_name:
+        params["model_name"] = model_name
+    request_api(api, "POST", "/api/dialog/msg/sendtext", params)
     return True
 
 
@@ -299,6 +335,7 @@ def build_parser() -> argparse.ArgumentParser:
     create.add_argument("--column-id")
     create.add_argument("--content-file", type=Path)
     create.add_argument("--config", help="Project TOML 配置文件")
+    add_agent_arguments(create, include_source_tool=True)
 
     bind = sub.add_parser("bind", help="绑定已有 Project 任务到本地工作区")
     bind.add_argument("--project-id", type=int, required=True)
@@ -306,6 +343,7 @@ def build_parser() -> argparse.ArgumentParser:
     bind.add_argument("--workdir", type=Path, required=True)
     bind.add_argument("--state", type=Path, help="默认写入工作区 .project-lifecycle-<task-id>.json")
     bind.add_argument("--config", help="Project TOML 配置文件")
+    add_agent_arguments(bind, include_source_tool=True)
 
     record = sub.add_parser("record", help="记录分析、方案、验证、PR 或其他生命周期产物")
     record.add_argument("--state", type=Path, required=True)
@@ -313,12 +351,14 @@ def build_parser() -> argparse.ArgumentParser:
     record.add_argument("--file", type=Path, required=True, help="包含 JSON 对象的 UTF-8 文件")
     record.add_argument("--publish", action="store_true", help="将该产物发布到 Project 任务讨论")
     record.add_argument("--config", help="Project TOML 配置文件")
+    add_agent_arguments(record, include_source_tool=True)
 
     archive = sub.add_parser("archive-link", help="校验并关联已生成的执行归档 manifest")
     archive.add_argument("--state", type=Path, required=True)
     archive.add_argument("--manifest", type=Path, required=True)
     archive.add_argument("--publish", action="store_true", help="将审计关联发布到 Project 任务讨论")
     archive.add_argument("--config", help="Project TOML 配置文件")
+    add_agent_arguments(archive, include_source_tool=True)
 
     approve = sub.add_parser("approve", help="记录外部负责人对方案的明确确认")
     approve.add_argument("--state", type=Path, required=True)
@@ -355,10 +395,18 @@ def main() -> int:
             else:
                 task_id = args.task_id
             state_path = args.state or default_state_path(args.workdir, task_id)
-            state = initialize(args.project_id, task_id, args.workdir, state_path, args.config)
+            state = initialize(
+                args.project_id,
+                task_id,
+                args.workdir,
+                state_path,
+                args.config,
+                context_from_args(args, missing_reason="host did not expose the active model"),
+            )
             result = {"projectId": args.project_id, "taskId": task_id, "stage": state["stage"], "state": str(state_path)}
         elif args.command == "record":
             state = load_state(args.state)
+            merge_state_agent_context(state, context_from_args(args))
             payload = load_record(args.file)
             record = add_record(state, args.kind, payload, args.file)
             if args.publish:
@@ -367,7 +415,9 @@ def main() -> int:
             result = {"kind": record["kind"], "sha256": record["sha256"], "published": bool(record.get("published"))}
         elif args.command == "archive-link":
             state = load_state(args.state)
+            merge_state_agent_context(state, context_from_args(args))
             payload = link_archive(state, args.manifest)
+            merge_state_agent_context(state, payload.get("agent"))
             record = add_record(state, "execution_archive", payload, args.manifest)
             if args.publish:
                 record["published"] = publish_record(state, record, args.config)

@@ -56,6 +56,37 @@ class ExecutionCaptureTest(unittest.TestCase):
             self.assertTrue(args.state.is_file())
             self.assertTrue((args.output_dir / "manifest.json").is_file())
 
+    def test_event_metadata_populates_agent_context_without_overriding_explicit_primary(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            events = root / "events.jsonl"
+            events.write_text(
+                json.dumps({
+                    "event_id": "1",
+                    "type": "session_start",
+                    "metadata": {
+                        "model": "event-model",
+                        "model_provider": "provider-b",
+                        "client_version": "2.0.0",
+                    },
+                }) + "\n",
+                encoding="utf-8",
+            )
+            state_path = root / "state.json"
+            capture.capture(capture.parser().parse_args([
+                "--project-id", "8", "--task-id", "123", "--source-tool", "codex",
+                "--model", "explicit-model", "--model-provider", "provider-a",
+                "--state", str(state_path), "--output-dir", str(root / "archive"),
+                "--input-file", str(events), "--incomplete",
+            ]))
+            state = json.loads(state_path.read_text(encoding="utf-8"))
+            self.assertEqual(state["model"], "explicit-model")
+            self.assertEqual(state["agent"]["client_version"], "2.0.0")
+            self.assertEqual(
+                [(item["id"], item["role"]) for item in state["agent"]["models"]],
+                [("explicit-model", "primary"), ("event-model", "participant")],
+            )
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -34,11 +34,20 @@
   "session_id": "client-session-id",
   "role": "tool",
   "content": {"exit_code": 0, "stdout": "done"},
-  "metadata": {"tool": "exec_command"}
+  "metadata": {
+    "tool": "exec_command",
+    "source_tool": "codex",
+    "model": "gpt-5",
+    "model_provider": "openai",
+    "client_version": "1.2.3",
+    "reasoning_effort": "high"
+  }
 }
 ```
 
 `type` 建议使用：`session_start`、`user_message`、`assistant_message`、`tool_call`、`tool_result`、`attachment`、`decision`、`session_end`、`session_error`。`role` 可省略，由桥接器按 `type` 推断。
+
+模型相关字段只能来自宿主公开事件或宿主明确传入的参数/环境变量，不能根据客户端名称猜测。桥接器识别 `model`、`model_id`、`model_name`、`provider`/`model_provider`、`client_version`、`reasoning_effort`、`source_tool` 和 `model_role`。显式 `--model` 是主模型；事件中不同的模型会作为 `participant` 保留。没有模型信息时，归档记录 `model_missing_reason`。
 
 ## 桥接器
 
@@ -57,9 +66,12 @@ cat events.jsonl | python3 scripts/project_execution_capture.py \
 
 ```bash
 cat events.jsonl | python3 scripts/project_execution_capture.py \
-  --source-tool claude --state .project-execution-123.json --output-dir .project-execution-123 \
+  --source-tool claude --model "<model-id>" \
+  --state .project-execution-123.json --output-dir .project-execution-123 \
   --incomplete --missing "客户端未提供隐藏上下文"
 ```
+
+命令行未方便传值时，可使用 `YEYING_AGENT_SOURCE_TOOL`、`YEYING_AGENT_MODEL`、`YEYING_AGENT_MODEL_PROVIDER`、`YEYING_AGENT_CLIENT_VERSION` 和 `YEYING_AGENT_REASONING_EFFORT`。命令行参数优先于环境变量。归档 finalize 后模型集合被冻结，新模型必须使用新的 execution，避免已发布附件与本地状态不一致。
 
 采集桥接器会：
 

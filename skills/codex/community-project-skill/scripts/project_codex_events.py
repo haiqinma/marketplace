@@ -9,6 +9,8 @@ import json
 import sys
 from typing import Any
 
+from project_agent_context import public_event_metadata
+
 
 def now() -> str:
     return dt.datetime.now(dt.timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z")
@@ -55,8 +57,10 @@ def normalize(payload: dict[str, Any], line_number: int = 0) -> dict[str, Any]:
     if session_id is not None:
         event["session_id"] = session_id
     metadata = value(payload, "metadata")
-    if metadata is not None:
-        event["metadata"] = metadata
+    normalized_metadata = dict(metadata) if isinstance(metadata, dict) else {}
+    normalized_metadata.update(public_event_metadata(payload))
+    if normalized_metadata:
+        event["metadata"] = normalized_metadata
     return event
 
 

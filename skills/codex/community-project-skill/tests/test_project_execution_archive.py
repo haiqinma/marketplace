@@ -72,10 +72,62 @@ class ExecutionArchiveTest(unittest.TestCase):
             self.assertFalse(manifest["complete"])
             self.assertEqual(manifest["taskId"], 123)
             self.assertEqual(manifest["lifecycleStage"], "verification")
+            self.assertEqual(manifest["agent"]["models"][0]["id"], "test-model")
             transcript_data = json.loads((archive_dir / "transcript.json").read_text(encoding="utf-8"))
             self.assertEqual(transcript_data["lifecycle"]["stage"], "verification")
             for item in manifest["files"]:
                 self.assertEqual(item["sha256"], hashlib.sha256((archive_dir / item["name"]).read_bytes()).hexdigest())
+
+    def test_finalize_records_reason_when_model_is_unavailable(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            archive_dir = Path(tmp) / "archive"
+            state = {
+                "schema": archive.SCHEMA,
+                "project_id": 8,
+                "task_id": 123,
+                "execution_id": "exec-no-model",
+                "source_tool": "codex",
+                "model": None,
+                "started_at": archive.now(),
+                "status": "running",
+                "complete": False,
+                "missing": ["hidden context"],
+                "records": [],
+                "attachments": [],
+            }
+
+            with mock.patch.dict("os.environ", {"YEYING_AGENT_MODEL": "ambient-model"}):
+                archive.finalize_state(state, archive_dir)
+
+            manifest = json.loads((archive_dir / "manifest.json").read_text(encoding="utf-8"))
+            self.assertEqual(manifest["agent"]["models"], [])
+            self.assertEqual(
+                manifest["agent"]["model_missing_reason"],
+                "host did not expose the active model",
+            )
+
+    def test_finalized_archive_rejects_a_new_model(self):
+        state = {
+            "schema": archive.SCHEMA,
+            "source_tool": "codex",
+            "model": "gpt-primary",
+            "agent": {
+                "source_tool": "codex",
+                "client_version": None,
+                "models": [{"id": "gpt-primary", "role": "primary", "source": "argument"}],
+                "model_missing_reason": None,
+            },
+            "finalized_at": archive.now(),
+        }
+        candidate = {
+            "source_tool": "codex",
+            "client_version": None,
+            "models": [{"id": "gpt-other", "role": "participant", "source": "event"}],
+            "model_missing_reason": None,
+        }
+
+        with self.assertRaisesRegex(ValueError, "执行归档已冻结"):
+            archive.merge_state_agent_context(state, candidate, locked=True)
 
     def test_publish_reuses_files_and_comment(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -102,6 +154,7 @@ class ExecutionArchiveTest(unittest.TestCase):
             remote: dict[str, dict] = {}
             bodies: dict[int, bytes] = {}
             comments: list[str] = []
+            sent_params: list[dict] = []
             next_id = [10]
 
             def fake_upload(_api, _path, params, _field, file_path):
@@ -116,6 +169,7 @@ class ExecutionArchiveTest(unittest.TestCase):
                 if path == "/api/dialog/msg/list":
                     return comments
                 if path == "/api/dialog/msg/sendtext":
+                    sent_params.append(dict(params))
                     comments.append(params["text"])
                     return {"id": 99}
                 if path == "/api/project/task/filedown" and raw:
@@ -134,6 +188,8 @@ class ExecutionArchiveTest(unittest.TestCase):
             self.assertTrue(all(item["reused"] is False for item in first["files"]))
             self.assertTrue(all(item["reused"] is True for item in second["files"]))
             self.assertEqual(len(comments), 1)
+            self.assertIn("主模型：`test-model`", comments[0])
+            self.assertEqual(sent_params[0]["model_name"], "test-model")
 
 
 if __name__ == "__main__":

@@ -54,9 +54,9 @@ python3 scripts/project_api.py projects
 python3 scripts/project_api.py tasks --project-id 8
 python3 scripts/project_api.py task-create --project-id 8 --name "实现某功能" --content-file /tmp/request.md
 python3 scripts/project_api.py task --task-id 123
-python3 scripts/project_api.py comment --task-id 123 --content "已完成实现和验证。"
-python3 scripts/project_api.py comment --task-id 123 --content-file /tmp/project-update.md
-python3 scripts/project_api.py comment --task-id 123 --update-id 456 --content-file /tmp/project-update.md
+python3 scripts/project_api.py comment --task-id 123 --model "<model-id>" --content "已完成实现和验证。"
+python3 scripts/project_api.py comment --task-id 123 --model "<model-id>" --content-file /tmp/project-update.md
+python3 scripts/project_api.py comment --task-id 123 --model "<model-id>" --update-id 456 --content-file /tmp/project-update.md
 python3 scripts/project_api.py update --task-id 123 --name "新标题"
 python3 scripts/project_api.py update --task-id 123 --content-file /tmp/task.md
 python3 scripts/project_api.py status --task-id 123 --flow-item-id 9
@@ -65,7 +65,7 @@ python3 scripts/project_api.py file-info --file-id 456
 python3 scripts/project_api.py download --file-id 456 --output /tmp/document.pdf
 
 # lifecycle state and gates
-python3 scripts/project_lifecycle.py bind --project-id 8 --task-id 123 --workdir /path/to/repository
+python3 scripts/project_lifecycle.py bind --project-id 8 --task-id 123 --workdir /path/to/repository --source-tool codex --model "<model-id>"
 python3 scripts/project_lifecycle.py record --state /path/to/repository/.project-lifecycle-123.json --kind analysis --file /tmp/analysis.json --publish
 python3 scripts/project_lifecycle.py record --state /path/to/repository/.project-lifecycle-123.json --kind documentation --file /tmp/documentation.json --publish
 python3 scripts/project_lifecycle.py approve --state /path/to/repository/.project-lifecycle-123.json --by "负责人" --reference "Project 评论或会议记录引用"
@@ -73,14 +73,14 @@ python3 scripts/project_lifecycle.py archive-link --state /path/to/repository/.p
 python3 scripts/project_lifecycle.py advance --state /path/to/repository/.project-lifecycle-123.json --to implementation
 
 # Task execution archive
-python3 scripts/project_execution_archive.py start --project-id 8 --task-id 123 --source-tool codex --state /path/to/repository/.project-execution-123.json --output-dir /path/to/repository/.project-execution-123 --lifecycle-file /path/to/repository/.project-lifecycle-123.json
+python3 scripts/project_execution_archive.py start --project-id 8 --task-id 123 --source-tool codex --model "<model-id>" --state /path/to/repository/.project-execution-123.json --output-dir /path/to/repository/.project-execution-123 --lifecycle-file /path/to/repository/.project-lifecycle-123.json
 python3 scripts/project_execution_archive.py append --state /path/to/repository/.project-execution-123.json --role user --content "用户请求"
 python3 scripts/project_execution_archive.py finalize --state /path/to/repository/.project-execution-123.json --incomplete --missing "平台隐藏上下文"
 python3 scripts/project_execution_archive.py publish --state /path/to/repository/.project-execution-123.json
 
 # 客户端 JSONL 自动采集桥接器
 cat events.jsonl | python3 scripts/project_execution_capture.py \
-  --project-id 8 --task-id 123 --source-tool claude \
+  --project-id 8 --task-id 123 --source-tool claude --model "<model-id>" \
   --state /path/to/repository/.project-execution-123.json \
   --output-dir /path/to/repository/.project-execution-123 \
   --lifecycle-file /path/to/repository/.project-lifecycle-123.json \
@@ -145,6 +145,8 @@ All successful commands print JSON to stdout. Failures print a concise error to 
 ## Task Execution Archive
 
 When an AI client or Agent is carrying out a concrete Project task, preserve the complete history available to the caller: user messages, assistant messages, tool calls, tool results, attachment references, decisions, and the final result. Start an `executionId`, append records as they become available, finalize the three archive files, then publish them to the task. The archive must be marked incomplete when the host cannot expose hidden context or full tool output. Use the same `executionId` for retries so publication can verify and reuse existing task attachments.
+
+Pass the real active model ID supplied by the host through `--model` whenever it is available. Never infer a model from `source_tool`, a client name, or a vendor default. The scripts also accept `YEYING_AGENT_MODEL`, `YEYING_AGENT_MODEL_PROVIDER`, `YEYING_AGENT_CLIENT_VERSION`, `YEYING_AGENT_REASONING_EFFORT`, and `YEYING_AGENT_SOURCE_TOOL`; explicit arguments take precedence. When the host does not expose a model, the archive keeps `model_missing_reason` instead of inventing one. The explicitly supplied model remains `primary`; other distinct models found in public client events are recorded as `participant`. Finalization freezes the model set so retries cannot silently change the identity of an already generated or published archive.
 
 For automatic client integration, use the client-neutral JSONL bridge described in [references/auto-capture.md](references/auto-capture.md). The bridge accepts events from hooks, wrappers, or native event streams; it does not claim access to hidden prompts or internal reasoning and must not upload when the target task is ambiguous.
 

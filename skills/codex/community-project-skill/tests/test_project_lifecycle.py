@@ -129,6 +129,12 @@ class LifecycleTest(unittest.TestCase):
     def test_publish_record_is_idempotent(self):
         state = self.state()
         state["stage"] = "solution"
+        state["agent"] = {
+            "source_tool": "codex",
+            "client_version": "1.0",
+            "models": [{"id": "gpt-test", "role": "primary", "source": "host"}],
+            "model_missing_reason": None,
+        }
         record = {
             "kind": "solution",
             "recorded_at": "2026-01-01T00:00:00Z",
@@ -142,6 +148,8 @@ class LifecycleTest(unittest.TestCase):
                  {"id": 1},
              ]) as request:
             self.assertTrue(lifecycle.publish_record(state, record))
+            sent = request.call_args_list[2].args[3]
+            self.assertEqual(sent["model_name"], "gpt-test")
             request.side_effect = [{"dialog_id": 456}, [lifecycle.render_record_comment(state, record)]]
             self.assertFalse(lifecycle.publish_record(state, record))
 
@@ -157,6 +165,14 @@ class LifecycleTest(unittest.TestCase):
                 "projectId": 8,
                 "taskId": 123,
                 "complete": False,
+                "sourceTool": "codex",
+                "model": "gpt-test",
+                "agent": {
+                    "source_tool": "codex",
+                    "client_version": "1.0",
+                    "models": [{"id": "gpt-test", "role": "primary", "source": "host"}],
+                    "model_missing_reason": None,
+                },
                 "missing": ["hidden context"],
                 "files": [{"name": "transcript.json", "sha256": hashlib.sha256(transcript.read_bytes()).hexdigest()}],
             }
@@ -164,6 +180,9 @@ class LifecycleTest(unittest.TestCase):
             payload = lifecycle.link_archive(state, manifest)
             self.assertEqual(payload["execution_id"], "exec-1")
             self.assertFalse(payload["complete"])
+            self.assertEqual(payload["source_tool"], "codex")
+            self.assertEqual(payload["model"], "gpt-test")
+            self.assertEqual(payload["agent"]["models"][0]["id"], "gpt-test")
             record = lifecycle.add_record(state, "execution_archive", payload, manifest)
             self.assertEqual(record["kind"], "execution_archive")
 

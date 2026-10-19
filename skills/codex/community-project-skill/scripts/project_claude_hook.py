@@ -9,6 +9,8 @@ import json
 import sys
 from typing import Any
 
+from project_agent_context import public_event_metadata
+
 
 TYPE_MAP = {
     "SessionStart": "session_start",
@@ -60,6 +62,7 @@ def normalize(payload: dict[str, Any]) -> dict[str, Any]:
         metadata["tool_name"] = tool_name
     if payload.get("cwd") is not None:
         metadata["cwd"] = payload["cwd"]
+    metadata.update(public_event_metadata(payload))
     seed = json.dumps(payload, ensure_ascii=False, sort_keys=True, default=str)
     event_id = str(first(payload, "event_id", "eventId") or "claude-" + hashlib.sha256(seed.encode()).hexdigest()[:24])
     event: dict[str, Any] = {

@@ -18,6 +18,13 @@ import uuid
 from pathlib import Path
 from typing import Any
 
+from project_agent_context import (
+    add_agent_arguments,
+    context_from_args,
+    ensure_state_agent_context,
+    merge_state_agent_context,
+    primary_model,
+)
 from project_api import ProjectApiError, load_config, request_api, request_upload
 
 
@@ -145,14 +152,22 @@ def render_collapsed(label: str, value: Any) -> list[str]:
 
 
 def render_markdown(state: dict[str, Any]) -> str:
+    agent = ensure_state_agent_context(state)
+    model_names = ", ".join(
+        f"{item.get('id')} ({item.get('role', 'participant')})"
+        for item in agent.get("models", [])
+        if item.get("id")
+    ) or "unknown"
     lines = [
         f"# Project 任务执行归档",
         "",
         f"- Project: `{state['project_id']}`",
         f"- Task: `{state['task_id']}`",
         f"- Execution: `{state['execution_id']}`",
-        f"- Source: `{state['source_tool']}`",
-        f"- Model: `{state.get('model') or 'unknown'}`",
+        f"- Source: `{agent.get('source_tool') or 'unknown'}`",
+        f"- Client version: `{agent.get('client_version') or 'unknown'}`",
+        f"- Models: `{model_names}`",
+        f"- Model missing reason: `{agent.get('model_missing_reason') or 'none'}`",
         f"- Started: `{state['started_at']}`",
         f"- Finished: `{state.get('finished_at') or 'running'}`",
         f"- Status: `{state['status']}`",
@@ -189,6 +204,9 @@ def render_markdown(state: dict[str, Any]) -> str:
 
 
 def finalize_state(state: dict[str, Any], output_dir: Path) -> dict[str, Any]:
+    agent = ensure_state_agent_context(state)
+    if not primary_model(agent) and not agent.get("model_missing_reason"):
+        agent["model_missing_reason"] = "host did not expose the active model"
     output_dir.mkdir(parents=True, exist_ok=True)
     state["records"] = redact(state.get("records", []))
     state["attachments"] = redact(state.get("attachments", []))
@@ -212,6 +230,7 @@ def finalize_state(state: dict[str, Any], output_dir: Path) -> dict[str, Any]:
             "executionId": state["execution_id"],
             "sourceTool": state["source_tool"],
             "model": state.get("model"),
+            "agent": agent,
             "startedAt": state["started_at"],
             "finishedAt": state["finished_at"],
             "status": state["status"],
@@ -240,6 +259,7 @@ def finalize_state(state: dict[str, Any], output_dir: Path) -> dict[str, Any]:
         "taskId": state["task_id"],
         "sourceTool": state["source_tool"],
         "model": state.get("model"),
+        "agent": agent,
         "startedAt": state["started_at"],
         "finishedAt": state["finished_at"],
         "exportedAt": now(),
@@ -290,6 +310,8 @@ def publish(
     state: dict[str, Any],
     config_path: str | Path | None = None,
 ) -> dict[str, Any]:
+    agent = ensure_state_agent_context(state)
+    model_name = primary_model(agent)
     archive_dir = Path(state.get("archive_dir", ""))
     if state.get("status") not in ("succeeded", "incomplete") or not archive_dir.is_dir():
         raise ProjectApiError("请先执行 finalize")
@@ -322,12 +344,17 @@ def publish(
     if not comment_sent:
         comment = (
             f"{marker} 执行过程已归档。\n\n"
+            f"执行工具：`{agent.get('source_tool') or 'unknown'}`；"
+            f"主模型：`{model_name or 'unknown'}`。\n"
             f"状态：{state['status']}；完整：{str(state.get('complete', False)).lower()}。\n"
             f"归档文件：{', '.join(item['name'] for item in uploaded)}。"
         )
-        request_api(api, "POST", "/api/dialog/msg/sendtext", {
+        params = {
             "dialog_id": dialog_id, "text": comment, "text_type": "md",
-        })
+        }
+        if model_name:
+            params["model_name"] = model_name
+        request_api(api, "POST", "/api/dialog/msg/sendtext", params)
     state["published"] = {"files": uploaded, "commentSent": not comment_sent, "publishedAt": now()}
     write_json(state_path, state)
     return state["published"]
@@ -339,8 +366,7 @@ def build_parser() -> argparse.ArgumentParser:
     start = sub.add_parser("start", help="创建执行归档状态")
     start.add_argument("--project-id", type=int, required=True)
     start.add_argument("--task-id", type=int, required=True)
-    start.add_argument("--source-tool", required=True, help="codex、claude 或其他执行工具")
-    start.add_argument("--model")
+    add_agent_arguments(start, include_source_tool=True, source_tool_required=True)
     start.add_argument("--execution-id")
     start.add_argument("--lifecycle-file", type=Path, help="研发生命周期 JSON 快照")
     start.add_argument("--state", type=Path, help="默认写入当前目录 .project-execution-<task-id>.json")
@@ -362,6 +388,7 @@ def build_parser() -> argparse.ArgumentParser:
     finalize.add_argument("--result")
     finalize.add_argument("--result-file", type=Path)
     finalize.add_argument("--lifecycle-file", type=Path, help="覆盖 start 阶段指定的生命周期快照")
+    add_agent_arguments(finalize)
     complete = finalize.add_mutually_exclusive_group()
     complete.add_argument("--complete", action="store_true")
     complete.add_argument("--incomplete", action="store_false", dest="complete")
@@ -385,13 +412,15 @@ def main() -> int:
             default_lifecycle = workdir / f".project-lifecycle-{args.task_id}.json"
             if lifecycle_file is None and default_lifecycle.is_file():
                 lifecycle_file = default_lifecycle
+            agent = context_from_args(args, missing_reason="host did not expose the active model")
             state = {
                 "schema": SCHEMA,
                 "project_id": args.project_id,
                 "task_id": args.task_id,
                 "execution_id": args.execution_id or str(uuid.uuid4()),
-                "source_tool": args.source_tool,
-                "model": args.model,
+                "source_tool": agent.get("source_tool") or args.source_tool,
+                "model": primary_model(agent),
+                "agent": agent,
                 "started_at": now(),
                 "status": "running",
                 "complete": False,
@@ -417,6 +446,11 @@ def main() -> int:
             print(json.dumps({"records": len(state["records"]), "executionId": state["execution_id"]}, ensure_ascii=False, indent=2))
         elif args.command == "finalize":
             state = load_state(args.state)
+            merge_state_agent_context(
+                state,
+                context_from_args(args),
+                locked=bool(state.get("finalized_at")),
+            )
             summary = args.summary_file.read_text(encoding="utf-8") if args.summary_file else args.summary
             result: Any = args.result_file.read_text(encoding="utf-8") if args.result_file else args.result
             if summary is not None:
