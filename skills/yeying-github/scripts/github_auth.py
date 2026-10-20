@@ -1,4 +1,4 @@
-"""Resolve PAT or GitHub App user credentials for one visibility profile."""
+"""Resolve PAT or GitHub App user credentials for one repository configuration."""
 
 from __future__ import annotations
 
@@ -48,16 +48,18 @@ def _expires_soon(expires_at: str) -> bool:
         raise SystemExit("GitHub App expires_at must be a Unix timestamp string.") from exc
 
 
-def _app_user_token(settings: Settings, visibility: str, profile: AuthProfile) -> str:
+def _app_user_token(settings: Settings, profile: AuthProfile) -> str:
     app = profile.github_app
     if not app.client_id:
-        raise SystemExit(f"GitHub config missing github.{visibility}.github_app.client_id.")
+        raise SystemExit(
+            f"GitHub config missing {settings.auth_table}.github_app.client_id."
+        )
     if app.user_token and not _expires_soon(app.expires_at):
         return app.user_token
     if not app.refresh_token:
         raise SystemExit(
-            f"GitHub App login is required for the {visibility} profile. Run "
-            f"github_app_login.py --visibility {visibility}."
+            f"GitHub App login is required for the {settings.project} configuration. Run "
+            f"github_app_login.py --project {settings.project}."
         )
     payload = _oauth_post(
         {
@@ -69,7 +71,7 @@ def _app_user_token(settings: Settings, visibility: str, profile: AuthProfile) -
     if payload.get("error"):
         raise SystemExit(
             f"GitHub App token refresh failed: {payload['error']}. Run "
-            f"github_app_login.py --visibility {visibility}."
+            f"github_app_login.py --project {settings.project}."
         )
     token = str(payload.get("access_token", "")).strip()
     refresh_token = str(payload.get("refresh_token", "")).strip()
@@ -82,7 +84,7 @@ def _app_user_token(settings: Settings, visibility: str, profile: AuthProfile) -
     expires_at = str(int(time.time()) + expires_in) if expires_in else ""
     update_github_app_tokens(
         settings.config_path,
-        visibility,
+        settings.auth_table,
         user_token=token,
         refresh_token=refresh_token or app.refresh_token,
         expires_at=expires_at,
@@ -92,20 +94,19 @@ def _app_user_token(settings: Settings, visibility: str, profile: AuthProfile) -
 
 def credentials_for(
     settings: Settings,
-    visibility: str,
     *,
     require_fork: bool = True,
     require_pull_request: bool = True,
 ) -> Credentials:
-    profile = settings.profile(visibility)
+    profile = settings.auth
     if profile.provider == "github_app":
-        token = _app_user_token(settings, visibility, profile)
+        token = _app_user_token(settings, profile)
         return Credentials("github_app", token, token)
     missing = []
     if require_fork and not profile.fork_token:
-        missing.append(f"github.{visibility}.fork_token")
+        missing.append(f"{settings.auth_table}.fork_token")
     if require_pull_request and not profile.pull_request_token:
-        missing.append(f"github.{visibility}.pull_request_token")
+        missing.append(f"{settings.auth_table}.pull_request_token")
     if missing:
         raise SystemExit(
             "GitHub config missing: "

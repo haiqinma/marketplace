@@ -74,22 +74,22 @@ def login(client_id: str) -> dict[str, Any]:
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--config")
-    parser.add_argument("--visibility", required=True, choices=("public", "private"))
+    parser.add_argument(
+        "--project",
+        default="default",
+        help="Named [github.projects.<name>] configuration, or default for [github].",
+    )
     args = parser.parse_args()
     try:
-        settings = load(args.config)
-        profile = settings.profile(args.visibility)
+        settings = load(args.config).resolve_project(args.project)
+        profile = settings.auth
     except ConfigError as exc:
         raise SystemExit(str(exc)) from exc
     if profile.provider != "github_app":
-        raise SystemExit(
-            f"Configure [github.{args.visibility}.github_app] before login."
-        )
+        raise SystemExit(f"Configure [{settings.auth_table}.github_app] before login.")
     client_id = profile.github_app.client_id
     if not client_id:
-        raise SystemExit(
-            f"GitHub config missing github.{args.visibility}.github_app.client_id."
-        )
+        raise SystemExit(f"GitHub config missing {settings.auth_table}.github_app.client_id.")
     result = login(client_id)
     token = str(result.get("access_token", "")).strip()
     if not token:
@@ -101,12 +101,12 @@ def main() -> int:
     expires_at = str(int(time.time()) + expires_in) if expires_in else ""
     update_github_app_tokens(
         settings.config_path,
-        args.visibility,
+        settings.auth_table,
         user_token=token,
         refresh_token=str(result.get("refresh_token", "")).strip(),
         expires_at=expires_at,
     )
-    print(f"GitHub App login stored for the {args.visibility} profile.")
+    print(f"GitHub App login stored for the {settings.project} configuration.")
     return 0
 
 

@@ -26,13 +26,16 @@ except ModuleNotFoundError:  # Python 3.10 and earlier
 DEFAULT_CONFIG_PATH = Path.home() / ".yeying" / "skills" / "github" / "config.toml"
 VALID_MODES = {"api", "git"}
 VALID_VISIBILITIES = {"auto", "public", "private"}
+AUTH_KEYS = {"fork_token", "pull_request_token", "github_app"}
 SECRET_KEYS = {
     "fork_token",
     "pull_request_token",
     "user_token",
     "refresh_token",
-    "client_secret",
 }
+PROJECT_NAME_RE = re.compile(r"^[A-Za-z0-9_-]+$")
+REPOSITORY_RE = re.compile(r"^[^/\s]+/[^/\s]+$")
+AUTH_TABLE_RE = re.compile(r"^github(?:\.projects\.[A-Za-z0-9_-]+)?$")
 
 
 class ConfigError(RuntimeError):
@@ -56,21 +59,101 @@ class AuthProfile:
 
 
 @dataclass(frozen=True)
+class ProjectOverride:
+    name: str
+    origin: str
+    upstream: str
+    mode: str
+    visibility: str
+    sync_script: str
+    pr_script: str
+    auth: AuthProfile | None
+    auth_table: str
+
+
+@dataclass(frozen=True)
 class Settings:
     mode: str
     visibility: str
     sync_script: str
     pr_script: str
-    public: AuthProfile
-    private: AuthProfile
+    auth: AuthProfile
     config_path: Path
+    project: str
+    auth_table: str
 
-    def profile(self, visibility: str) -> AuthProfile:
-        if visibility == "public":
-            return self.public
-        if visibility == "private":
-            return self.private
-        raise ConfigError(f"Resolved visibility must be public or private, got: {visibility!r}")
+
+@dataclass(frozen=True)
+class Config:
+    mode: str
+    visibility: str
+    sync_script: str
+    pr_script: str
+    auth: AuthProfile
+    projects: tuple[ProjectOverride, ...]
+    config_path: Path
+    mode_override: str
+    visibility_override: str
+
+    def _settings(self, project: ProjectOverride | None) -> Settings:
+        return Settings(
+            mode=self.mode_override or (project.mode if project else "") or self.mode,
+            visibility=(
+                self.visibility_override
+                or (project.visibility if project else "")
+                or self.visibility
+            ),
+            sync_script=(project.sync_script if project else "") or self.sync_script,
+            pr_script=(project.pr_script if project else "") or self.pr_script,
+            auth=(project.auth if project and project.auth is not None else self.auth),
+            config_path=self.config_path,
+            project=project.name if project else "default",
+            auth_table=(
+                project.auth_table
+                if project and project.auth is not None
+                else "github"
+            ),
+        )
+
+    def resolve(self, origin: str, upstream: str) -> Settings:
+        normalized_origin = _repository(origin, "origin")
+        normalized_upstream = _repository(upstream, "upstream")
+        exact = [
+            project
+            for project in self.projects
+            if project.origin.lower() == normalized_origin.lower()
+            and project.upstream.lower() == normalized_upstream.lower()
+        ]
+        if len(exact) > 1:
+            names = ", ".join(project.name for project in exact)
+            raise ConfigError(
+                f"Multiple project configurations match {origin} -> {upstream}: {names}"
+            )
+        if exact:
+            return self._settings(exact[0])
+
+        partial = [
+            project
+            for project in self.projects
+            if project.origin.lower() == normalized_origin.lower()
+            or project.upstream.lower() == normalized_upstream.lower()
+        ]
+        if partial:
+            names = ", ".join(project.name for project in partial)
+            raise ConfigError(
+                f"Project configuration {names} partially matches {origin} -> {upstream}; "
+                "both origin and upstream must match exactly"
+            )
+        return self._settings(None)
+
+    def resolve_project(self, name: str) -> Settings:
+        if name == "default":
+            return self._settings(None)
+        for project in self.projects:
+            if project.name == name:
+                return self._settings(project)
+        available = ", ".join(["default", *(project.name for project in self.projects)])
+        raise ConfigError(f"Unknown GitHub project configuration {name!r}; available: {available}")
 
 
 def _assign_nested(result: dict[str, object], path: list[str]) -> dict[str, object]:
@@ -146,13 +229,6 @@ def _read_config(path: Path, required: bool) -> dict[str, object]:
     return section
 
 
-def _table(section: dict[str, object], name: str) -> dict[str, object]:
-    value = section.get(name, {})
-    if not isinstance(value, dict):
-        raise ConfigError(f"[github.{name}] must be a TOML table")
-    return value
-
-
 def _reject_unknown(
     table: dict[str, object], allowed: set[str], table_name: str
 ) -> None:
@@ -164,32 +240,42 @@ def _reject_unknown(
         )
 
 
-def _profile(
-    section: dict[str, object],
-    visibility: str,
-) -> AuthProfile:
-    profile = _table(section, visibility)
-    _reject_unknown(
-        profile,
-        {"fork_token", "pull_request_token", "github_app"},
-        f"github.{visibility}",
-    )
-    fork_token = str(profile.get("fork_token", "")).strip()
-    pull_request_token = str(profile.get("pull_request_token", "")).strip()
-    app_configured = "github_app" in profile
-    pat_configured = bool(fork_token or pull_request_token)
-    if app_configured and pat_configured:
+def _validated_choice(
+    value: object, allowed: set[str], field: str, *, empty: bool = False
+) -> str:
+    result = str(value or "").strip().lower()
+    if empty and not result:
+        return ""
+    if result not in allowed:
+        raise ConfigError(f"{field} must be one of {sorted(allowed)}, got: {result!r}")
+    return result
+
+
+def _repository(value: object, field: str) -> str:
+    result = str(value or "").strip()
+    if result.endswith(".git"):
+        result = result[:-4]
+    if not REPOSITORY_RE.fullmatch(result):
+        raise ConfigError(f"{field} must use owner/repository form, got: {result!r}")
+    return result
+
+
+def _auth_profile(table: dict[str, object], table_name: str) -> AuthProfile:
+    fork_token = str(table.get("fork_token", "")).strip()
+    pull_request_token = str(table.get("pull_request_token", "")).strip()
+    app_configured = "github_app" in table
+    if app_configured and (fork_token or pull_request_token):
         raise ConfigError(
-            f"[github.{visibility}] configures both PAT and GitHub App authentication; "
+            f"[{table_name}] configures both PAT and GitHub App authentication; "
             "keep either fork_token/pull_request_token or github_app"
         )
-    app = profile.get("github_app", {})
+    app = table.get("github_app", {})
     if not isinstance(app, dict):
-        raise ConfigError(f"[github.{visibility}.github_app] must be a TOML table")
+        raise ConfigError(f"[{table_name}.github_app] must be a TOML table")
     _reject_unknown(
         app,
-        {"client_id", "client_secret", "user_token", "refresh_token", "expires_at"},
-        f"github.{visibility}.github_app",
+        {"client_id", "user_token", "refresh_token", "expires_at"},
+        f"{table_name}.github_app",
     )
     return AuthProfile(
         provider="github_app" if app_configured else "pat",
@@ -204,67 +290,140 @@ def _profile(
     )
 
 
+def _projects(section: dict[str, object]) -> tuple[ProjectOverride, ...]:
+    raw_projects = section.get("projects", {})
+    if not isinstance(raw_projects, dict):
+        raise ConfigError("[github.projects] must be a TOML table")
+    result: list[ProjectOverride] = []
+    pairs: dict[tuple[str, str], str] = {}
+    for name, raw_project in raw_projects.items():
+        if not PROJECT_NAME_RE.fullmatch(name):
+            raise ConfigError(
+                f"GitHub project configuration name must match {PROJECT_NAME_RE.pattern}: {name!r}"
+            )
+        if not isinstance(raw_project, dict):
+            raise ConfigError(f"[github.projects.{name}] must be a TOML table")
+        table_name = f"github.projects.{name}"
+        _reject_unknown(
+            raw_project,
+            {
+                "origin",
+                "upstream",
+                "mode",
+                "visibility",
+                "sync_script",
+                "pr_script",
+                *AUTH_KEYS,
+            },
+            table_name,
+        )
+        origin = _repository(raw_project.get("origin", ""), f"{table_name}.origin")
+        upstream = _repository(raw_project.get("upstream", ""), f"{table_name}.upstream")
+        pair = (origin.lower(), upstream.lower())
+        if pair in pairs:
+            raise ConfigError(
+                f"[{table_name}] duplicates repository pair configured by "
+                f"[github.projects.{pairs[pair]}]"
+            )
+        pairs[pair] = name
+        mode = _validated_choice(
+            raw_project.get("mode", ""), VALID_MODES, f"{table_name}.mode", empty=True
+        )
+        visibility = _validated_choice(
+            raw_project.get("visibility", ""),
+            VALID_VISIBILITIES,
+            f"{table_name}.visibility",
+            empty=True,
+        )
+        auth = (
+            _auth_profile(raw_project, table_name)
+            if AUTH_KEYS.intersection(raw_project)
+            else None
+        )
+        result.append(
+            ProjectOverride(
+                name=name,
+                origin=origin,
+                upstream=upstream,
+                mode=mode,
+                visibility=visibility,
+                sync_script=str(raw_project.get("sync_script", "")).strip(),
+                pr_script=str(raw_project.get("pr_script", "")).strip(),
+                auth=auth,
+                auth_table=table_name,
+            )
+        )
+    return tuple(result)
+
+
 def load(
     explicit_path: str | Path | None = None,
     mode_override: str | None = None,
     visibility_override: str | None = None,
-) -> Settings:
+) -> Config:
     explicit = Path(explicit_path).expanduser() if explicit_path else None
     env_path = os.environ.get("YEYING_GITHUB_CONFIG")
     path = explicit or (Path(env_path).expanduser() if env_path else DEFAULT_CONFIG_PATH)
     section = _read_config(path, required=explicit is not None or bool(env_path))
     _reject_unknown(
         section,
-        {"mode", "visibility", "sync_script", "pr_script", "public", "private"},
+        {
+            "mode",
+            "visibility",
+            "sync_script",
+            "pr_script",
+            "projects",
+            *AUTH_KEYS,
+        },
         "github",
     )
 
-    mode = (
-        (mode_override or "").strip()
-        or os.environ.get("YEYING_GITHUB_MODE", "").strip()
-        or str(section.get("mode", "api")).strip()
-    ).lower()
-    if mode not in VALID_MODES:
-        raise ConfigError(f"GitHub mode must be one of {sorted(VALID_MODES)}, got: {mode!r}")
-
-    visibility = (
+    mode = _validated_choice(section.get("mode", "api"), VALID_MODES, "github.mode")
+    visibility = _validated_choice(
+        section.get("visibility", "auto"), VALID_VISIBILITIES, "github.visibility"
+    )
+    forced_mode = _validated_choice(
+        (mode_override or "").strip() or os.environ.get("YEYING_GITHUB_MODE", "").strip(),
+        VALID_MODES,
+        "GitHub mode override",
+        empty=True,
+    )
+    forced_visibility = _validated_choice(
         (visibility_override or "").strip()
-        or os.environ.get("YEYING_GITHUB_VISIBILITY", "").strip()
-        or str(section.get("visibility", "auto")).strip()
-    ).lower()
-    if visibility not in VALID_VISIBILITIES:
-        raise ConfigError(
-            "GitHub visibility must be one of "
-            f"{sorted(VALID_VISIBILITIES)}, got: {visibility!r}"
-        )
-
+        or os.environ.get("YEYING_GITHUB_VISIBILITY", "").strip(),
+        VALID_VISIBILITIES,
+        "GitHub visibility override",
+        empty=True,
+    )
     sync_script = str(section.get("sync_script", "scripts/sync.sh")).strip()
     pr_script = str(section.get("pr_script", "scripts/pr.sh")).strip()
     if not sync_script or not pr_script:
         raise ConfigError("sync_script and pr_script must be non-empty paths")
 
-    return Settings(
+    return Config(
         mode=mode,
         visibility=visibility,
         sync_script=sync_script,
         pr_script=pr_script,
-        public=_profile(section, "public"),
-        private=_profile(section, "private"),
+        auth=_auth_profile(section, "github"),
+        projects=_projects(section),
         config_path=path,
+        mode_override=forced_mode,
+        visibility_override=forced_visibility,
     )
 
 
 def update_github_app_tokens(
     path: Path,
-    visibility: str,
+    auth_table: str,
     *,
     user_token: str,
     refresh_token: str,
     expires_at: str,
 ) -> None:
-    if visibility not in {"public", "private"}:
-        raise ConfigError(f"Cannot update GitHub App tokens for visibility: {visibility!r}")
-    table = f"github.{visibility}.github_app"
+    if not AUTH_TABLE_RE.fullmatch(auth_table):
+        raise ConfigError(f"Cannot update GitHub App tokens for table: {auth_table!r}")
+    table = f"{auth_table}.github_app"
     try:
         raw = path.read_text(encoding="utf-8")
     except OSError as exc:

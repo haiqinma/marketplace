@@ -91,9 +91,9 @@ def github_repo_metadata(
             return None
         if exc.code in {401, 403, 404}:
             raise SystemExit(
-                f"Cannot read GitHub repository {repo} with the selected upstream "
-                f"credential (HTTP {exc.code}). For private delivery, the private "
-                "profile must read both origin and upstream."
+                f"Cannot read GitHub repository {repo} with the selected project "
+                f"credential (HTTP {exc.code}). The pull_request_token or GitHub App "
+                "user token must read both origin and upstream."
             ) from exc
         raise SystemExit(f"Cannot inspect GitHub repository {repo} (HTTP {exc.code}).") from exc
     except (TimeoutError, urllib.error.URLError) as exc:
@@ -151,43 +151,14 @@ def resolve_repository_access(
     upstream_repo: str,
 ) -> tuple[str, Credentials]:
     require_fork = settings.mode == "api"
-    if settings.visibility in {"public", "private"}:
-        credentials = credentials_for(
-            settings,
-            settings.visibility,
-            require_fork=require_fork,
-        )
-        visibility = validate_repository_pair(
-            settings.visibility,
-            origin_repo,
-            upstream_repo,
-            credentials.pull_request_token,
-        )
-        return visibility, credentials
-
-    anonymous_origin = github_repo_metadata(origin_repo, allow_not_found=True)
-    anonymous_upstream = github_repo_metadata(upstream_repo, allow_not_found=True)
-    if anonymous_origin is not None and anonymous_upstream is not None:
-        origin_visibility = metadata_visibility(origin_repo, anonymous_origin)
-        upstream_visibility = metadata_visibility(upstream_repo, anonymous_upstream)
-        if origin_visibility == upstream_visibility == "public":
-            credentials = credentials_for(
-                settings,
-                "public",
-                require_fork=require_fork,
-            )
-            validate_repository_pair(
-                "public", origin_repo, upstream_repo, credentials.pull_request_token
-            )
-            return "public", credentials
-
     credentials = credentials_for(
         settings,
-        "private",
         require_fork=require_fork,
     )
+    if settings.visibility in {"public", "private"}:
+        return settings.visibility, credentials
     visibility = validate_repository_pair(
-        "private", origin_repo, upstream_repo, credentials.pull_request_token
+        "auto", origin_repo, upstream_repo, credentials.pull_request_token
     )
     return visibility, credentials
 
@@ -256,7 +227,6 @@ def read_body(args: argparse.Namespace, title: str) -> str:
 def api_command(
     args: argparse.Namespace,
     settings: Settings,
-    visibility: str,
     title: str,
     body: str,
 ) -> list[str]:
@@ -265,8 +235,6 @@ def api_command(
         str(Path(__file__).with_name("github_api_push.py")),
         "--config",
         str(settings.config_path.expanduser().resolve()),
-        "--visibility",
-        visibility,
         "--remote",
         "origin",
         "--branch",
@@ -437,7 +405,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--visibility",
         choices=("auto", "public", "private"),
-        help="Detect repository visibility, or assert that both repositories match.",
+        help="Detect visibility with the selected credential, or use an explicit configured value.",
     )
     parser.add_argument("--title", required=True, help="Specific title for the complete upstream PR delta.")
     body_group = parser.add_mutually_exclusive_group()
@@ -451,19 +419,22 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> int:
     args = parse_args()
+    title = validate_title(args.title)
+    root, origin_repo, upstream_repo = ensure_fork_main()
     try:
-        settings = load(args.config, args.mode, args.visibility)
+        settings = load(args.config, args.mode, args.visibility).resolve(
+            origin_repo, upstream_repo
+        )
     except ConfigError as exc:
         raise SystemExit(str(exc)) from exc
     if args.skip_sync and settings.mode != "git":
         raise SystemExit("--skip-sync is available only in git mode.")
-    title = validate_title(args.title)
-    root, origin_repo, upstream_repo = ensure_fork_main()
     visibility, credentials = resolve_repository_access(
         settings, origin_repo, upstream_repo
     )
     print(f"mode: {settings.mode}")
     print(f"visibility: {visibility}")
+    print(f"configuration: {settings.project}")
     print(f"authentication: {credentials.provider}")
     print(f"head: {origin_repo}:main")
     print(f"base: {upstream_repo}:main")
@@ -473,7 +444,7 @@ def main() -> int:
     if settings.mode == "api":
         body = read_body(args, title)
         run(
-            api_command(args, settings, visibility, title, body),
+            api_command(args, settings, title, body),
             env=subprocess_env(),
         )
     else:

@@ -1,8 +1,15 @@
-# 认证配置与执行规则
+# 配置与执行规则
 
-## 配置结构
+## 设计原则
 
-`[github]` 只保存传输、可见性和仓库脚本设置。PAT 必须放在对应的公共或私有 profile 中：
+凭证按账号默认值或具体仓库对组织，不按 public/private 组织。公共或私有只是 GitHub 仓库元数据，不应决定从哪个凭证 profile 取值。
+
+配置只有两层：
+
+- `[github]`：所有仓库的默认配置。
+- `[github.projects.<name>]`：精确匹配 origin 和 upstream 的可选项目覆盖。
+
+## 默认配置
 
 ```toml
 [github]
@@ -10,153 +17,199 @@ mode = "api"
 visibility = "auto"
 sync_script = "scripts/sync.sh"
 pr_script = "scripts/pr.sh"
-
-[github.public]
-fork_token = ""
-pull_request_token = ""
-
-[github.private]
 fork_token = ""
 pull_request_token = ""
 ```
 
-每个 profile 顶层只允许：
+`[github]` 只允许：
 
 ```text
+mode
+visibility
+sync_script
+pr_script
+fork_token
+pull_request_token
+github_app
+projects
+```
+
+不支持 `provider`、共享 `token`、`origin_token`、`upstream_token`、`public` 或 `private` 子 profile。未知字段触发 `ConfigError`。
+
+## 项目覆盖
+
+```toml
+[github.projects.marketplace]
+origin = "liuppx/marketplace"
+upstream = "yeying-community/marketplace"
+visibility = "public"
+```
+
+项目名称只允许字母、数字、`_` 和 `-`。每个项目必须配置：
+
+```text
+origin = "owner/repository"
+upstream = "owner/repository"
+```
+
+匹配规则：
+
+1. 从当前 Git remote 解析 origin 和 upstream。
+2. 两端都匹配时选择该项目，仓库名比较不区分大小写。
+3. 只有一端匹配时停止，避免静默使用默认配置。
+4. 两个项目不得声明相同的仓库对。
+5. 没有任何相关匹配时使用 `[github]`。
+
+项目表允许覆盖：
+
+```text
+mode
+visibility
+sync_script
+pr_script
 fork_token
 pull_request_token
 github_app
 ```
 
-不存在共享 `token` 或字段回退。凭证不得放在 `[github]` 根表。`provider` 和所有其他未知字段都会触发 `ConfigError`，不会被静默忽略。
+## 继承规则
 
-两个 profile 完全隔离：
+普通字段逐项继承：
 
-- 公共交付只读取 `[github.public]`。
-- 私有交付只读取 `[github.private]`。
-- 自动检测为公共时，不加载私有凭证。
-- 自动检测无法匿名读取两端时，解析私有 profile 的认证并验证两端。
+```text
+CLI -> 环境变量 -> 项目 -> 全局 -> 内置默认值
+```
+
+认证不逐项拼接：
+
+1. 项目没有任何认证字段时，完整继承全局认证。
+2. 项目声明 `fork_token`、`pull_request_token` 或 `github_app` 中任一项时，完整替换全局认证。
+3. 项目缺少的 Token 保持缺失，并由对应执行路径给出准确错误。
+
+例如，下面的项目不会继承全局 `pull_request_token`：
+
+```toml
+[github]
+fork_token = "<global-fork>"
+pull_request_token = "<global-pr>"
+
+[github.projects.special]
+origin = "me/special"
+upstream = "org/special"
+fork_token = "<project-fork>"
+```
+
+项目 `special` 的 `pull_request_token` 为空。这样可以防止两个权限域的凭证被意外组合。
+
+## 认证方式推断
+
+对最终选中的默认或项目认证执行：
+
+1. 非空 `fork_token` 或 `pull_request_token` 表示 PAT。
+2. 存在对应的 `github_app` 子表表示 GitHub App。
+3. 非空 PAT 与 GitHub App 同时存在时触发 `ConfigError`。
+4. 两者都没有时内部按 PAT 处理，让具体操作报告缺少哪个字段。
+
+全局 App 表：
+
+```toml
+[github.github_app]
+client_id = "Iv1.xxxxxxxxxxxxxxxx"
+```
+
+项目 App 表：
+
+```toml
+[github.projects.private_repo]
+origin = "me/private-repo"
+upstream = "org/private-repo"
+visibility = "private"
+
+[github.projects.private_repo.github_app]
+client_id = "Iv1.xxxxxxxxxxxxxxxx"
+```
+
+登录命令：
+
+```bash
+python3 scripts/github_app_login.py --project default
+python3 scripts/github_app_login.py --project private_repo
+```
+
+登录和刷新会把 `user_token`、`refresh_token`、`expires_at` 原子写回实际提供认证的 App 表。如果项目继承全局 App，使用 `--project <name>` 最终仍会更新 `[github.github_app]`。
+
+## 可见性
+
+### 自动探测
+
+`visibility = "auto"` 时：
+
+1. 先解析项目配置和认证。
+2. 使用最终的 `pull_request_token` 或 GitHub App user token 请求 origin 元数据。
+3. 使用同一凭证请求 upstream 元数据。
+4. 读取 `visibility`，旧响应以 `private` 布尔字段回退。
+5. 两端可见性不同则停止。
+
+每次执行固定增加两次已认证 REST API 请求。Token 本身不会被消耗，但请求计入 GitHub API rate limit。普通用户 Token 通常是每小时 5000 次；实际额度以 GitHub 响应和账号策略为准。
+
+不再先匿名请求。匿名请求常见额度是每出口 IP 每小时 60 次，HTTP 403 既可能是额度耗尽，也可能是策略限制，不能可靠推断仓库为私有。
+
+### 显式配置
+
+`visibility = "public"` 或 `"private"` 时，Skill 信任配置并跳过上述两次专门的元数据请求。
+
+显式配置不改变凭证选择，也不会跳过 API 发布和 PR 管理所需的正常请求。建议把显式可见性放在对应项目表中，而不是作为所有项目的全局断言。
 
 ## PAT 职责
 
 | 字段 | API 模式 | Git 模式 |
 | --- | --- | --- |
 | `fork_token` | 上传本地已提交对象并更新个人 `origin/main` | 不使用，Git 使用 SSH 或 HTTPS credential helper |
-| `pull_request_token` | 读取仓库元数据并查询、创建或更新 upstream PR | 临时映射为 `GH_TOKEN` 传给 `pr.sh`/`gh` |
+| `pull_request_token` | 自动探测可见性，并读取元数据、查询、创建或更新 upstream PR | 临时映射为 `GH_TOKEN` 传给 `pr.sh`/`gh` |
 
-API 模式要求两个字段。Git 模式允许 `fork_token` 为空，但仍要求 `pull_request_token`。
+API 模式要求两个字段。Git 模式允许 `fork_token` 为空，但要求 `pull_request_token`。
 
-同一个 PAT 覆盖两个职责时，两个字段填写同一个值。实现不做隐式共享，以便错误信息和权限审计始终指向具体职责。
+同一个 PAT 覆盖两个职责时，两个字段填写同一个值；实现不做隐式共享。
 
-## 认证方式自动推断
+## PAT 权限
 
-用户不配置 `provider`。每个公共或私有 profile 独立按以下规则推断：
+公共跨 owner fork 的 Classic PAT：
 
-1. 非空 `fork_token` 或 `pull_request_token` 表示 PAT。
-2. 存在 `[github.<visibility>.github_app]` 子表表示 GitHub App。
-3. 同一个 profile 同时包含非空 PAT 字段和 GitHub App 子表时触发 `ConfigError`。
-4. 两者都没有时内部按 PAT 处理，让具体操作准确报告缺少 `fork_token` 或 `pull_request_token`。
-
-PAT 字段即使只配置一个也会选择 PAT，具体执行模式仍会检查自己需要的字段。空字符串不算已配置的 PAT，因此可以保留空的 PAT 占位值后改用 GitHub App，但推荐直接删除无用字段以保持配置清楚。
-
-GitHub App 通过 Device Flow 获取一个 user access token，运行时把它同时映射为 fork 与 PR 凭证。配置示例：
-
-```toml
-[github.private.github_app]
-client_id = "Iv1.xxxxxxxxxxxxxxxx"
-user_token = ""       # github_app_login.py 写入
-refresh_token = ""    # github_app_login.py 写入
-expires_at = ""       # Unix 时间戳字符串
+```text
+public_repo
 ```
 
-登录命令：
+私有跨 owner fork 的 Classic PAT：
 
-```bash
-python3 scripts/github_app_login.py --visibility private
+```text
+repo
 ```
 
-用户令牌距过期不足五分钟时，Skill 使用 refresh token 自动刷新并原子写回配置。Device Flow 的 refresh token 刷新不需要 Client Secret。
+修改 `.github/workflows/` 时按需增加：
 
-## 可见性解析
-
-`visibility = "auto"`：
-
-1. 不带认证读取 origin 和 upstream 元数据。
-2. 两端都可读且为 public 时选择公共 profile。
-3. 任一端无法匿名读取时选择私有 profile，解析其 PAT 或 GitHub App 认证后重新读取两端。
-4. 两端实际可见性不同、显式断言不匹配，或凭证看不到任一私有仓库时停止。
-
-显式 `public` 或 `private` 只决定预期 profile，仍会读取 GitHub 元数据验证。
-
-## 公共 PAT 权限
-
-Classic PAT：
-
-```toml
-[github.public]
-fork_token = "<public_repo PAT>"
-pull_request_token = "<同一个 public_repo PAT>"
+```text
+workflow
 ```
-
-- 只选择 `public_repo`。
-- 修改 `.github/workflows/` 时额外选择 `workflow`。
-- PAT 用户必须能更新个人 fork，并能从该 fork 创建 upstream PR。
 
 Fine-grained PAT：
 
 - `fork_token`：个人 fork 的 Metadata read、Contents read/write。
 - `pull_request_token`：社区 upstream 的 Metadata read、Pull requests read/write。
-- Fine-grained PAT 绑定一个 resource owner；只有贡献者能选择社区组织且 Token 获得批准时，第二个配置才可行。
-
-## 私有 PAT 权限
-
-跨 resource owner 推荐 Classic PAT：
-
-```toml
-[github.private]
-fork_token = "<repo PAT>"
-pull_request_token = "<同一个 repo PAT>"
-```
-
-- 选择顶层 `repo`。
-- PAT 用户必须读取两端私有仓库、更新个人 fork并创建 upstream PR。
-- 组织可能要求 PAT 审批、SAML SSO 授权或 IP allow list。
-- 私有 fork network 必须得到组织、企业和仓库策略允许。
-
-两个私有仓库属于同一个 resource owner 时，可以使用同时选择两端仓库、具有 Contents read/write 与 Pull requests read/write 的 Fine-grained PAT。
-
-## Classic PAT 禁止的额外权限
-
-除按需增加 `workflow` 外，不选择以下无关 scope：
-
-```text
-admin:enterprise
-write:network_configurations
-admin:org
-delete_repo
-packages
-hooks
-user
-audit log
-codespaces
-Copilot
-projects
-GPG/SSH signing key administration
-```
+- 自动探测或私有交付时，PR 凭证必须读取 origin 和 upstream。
+- Fine-grained PAT 绑定一个 resource owner，跨 owner 私有 fork 可能无法由一个 Token 覆盖。
 
 ## GitHub App 边界
 
-- User access token 的权限是用户权限、App 权限和 installation 仓库范围的交集。
+- User access token 权限是用户权限、App 权限和 installation 仓库范围的交集。
 - App 必须安装到 fork 和 upstream 两边，授权用户也必须访问两端。
 - App 需要 Metadata read、Contents read/write 和 Pull requests read/write。
 - Device Flow 适合本地 Agent 环境。
-- Installation token 只属于一个 installation 且一小时过期，不作为跨 owner 私有 PR 的默认凭证。
+- Installation token 只属于一个 installation 且一小时过期，不作为跨 owner PR 的默认组合凭证。
 
 ## Git 模式
 
 - `sync.sh` 不接收 PAT 或 GitHub App Token；fetch/push 使用 SSH Key 或 HTTPS credential helper。
-- `pr.sh`/`gh` 只接收 `pull_request_token`，临时映射为 `GH_TOKEN`。
-- 公共和私有 profile 不会同时注入。
+- `pr.sh`/`gh` 只接收最终解析出的 `pull_request_token`，临时映射为 `GH_TOKEN`。
 - Git 模式不支持 `--allow-dirty`。
 
 ## 安全规则

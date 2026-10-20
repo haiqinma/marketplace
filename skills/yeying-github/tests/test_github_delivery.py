@@ -15,16 +15,17 @@ from github_config import AuthProfile, GitHubAppSettings, Settings  # noqa: E402
 
 
 class GitHubDeliveryTests(unittest.TestCase):
-    def settings(self) -> Settings:
+    def settings(self, visibility: str = "auto") -> Settings:
         app = GitHubAppSettings("", "", "", "")
         return Settings(
             mode="api",
-            visibility="auto",
+            visibility=visibility,
             sync_script="scripts/sync.sh",
             pr_script="scripts/pr.sh",
-            public=AuthProfile("pat", "public-origin", "public-upstream", app),
-            private=AuthProfile("pat", "private-origin", "private-upstream", app),
+            auth=AuthProfile("pat", "configured-fork", "configured-pr", app),
             config_path=Path("/secure/config.toml"),
+            project="default",
+            auth_table="github",
         )
 
     def test_parse_github_repo(self) -> None:
@@ -51,12 +52,12 @@ class GitHubDeliveryTests(unittest.TestCase):
     def test_api_command_carries_explicit_title(self) -> None:
         args = argparse.Namespace(dry_run=True, allow_dirty=True)
         command = github_delivery.api_command(
-            args, self.settings(), "public", "docs: accurate title", "body"
+            args, self.settings(), "docs: accurate title", "body"
         )
         self.assertIn("--pr-title", command)
         self.assertEqual(command[command.index("--pr-title") + 1], "docs: accurate title")
         self.assertEqual(command[command.index("--config") + 1], "/secure/config.toml")
-        self.assertEqual(command[command.index("--visibility") + 1], "public")
+        self.assertNotIn("--visibility", command)
         self.assertIn("--dry-run", command)
         self.assertIn("--allow-dirty", command)
 
@@ -142,47 +143,65 @@ class GitHubDeliveryTests(unittest.TestCase):
                 "public", "liuppx/repo", "yeying-community/repo", "configured-token"
             )
 
-    def test_auto_public_selects_only_public_credentials(self) -> None:
-        public = Credentials("pat", "public-origin", "public-upstream")
+    def test_auto_visibility_uses_selected_credentials_for_two_metadata_requests(self) -> None:
+        selected = Credentials("pat", "configured-fork", "configured-pr")
         with mock.patch.object(
             github_delivery,
             "github_repo_metadata",
-            side_effect=[
-                {"visibility": "public"},
-                {"visibility": "public"},
-                {"visibility": "public"},
-                {"visibility": "public"},
-            ],
-        ), mock.patch.object(
-            github_delivery, "credentials_for", return_value=public
+            side_effect=[{"visibility": "public"}, {"visibility": "public"}],
+        ) as metadata, mock.patch.object(
+            github_delivery, "credentials_for", return_value=selected
         ) as credentials_for:
             visibility, credentials = github_delivery.resolve_repository_access(
                 self.settings(), "liuppx/repo", "yeying-community/repo"
             )
         self.assertEqual(visibility, "public")
-        self.assertEqual(credentials, public)
-        self.assertEqual(credentials_for.call_args.args[1], "public")
+        self.assertEqual(credentials, selected)
+        credentials_for.assert_called_once_with(self.settings(), require_fork=True)
+        self.assertEqual(metadata.call_count, 2)
+        self.assertEqual(metadata.call_args_list[0].args[1], "configured-pr")
+        self.assertEqual(metadata.call_args_list[1].args[1], "configured-pr")
 
-    def test_auto_private_selects_private_credentials(self) -> None:
-        private = Credentials("pat", "private-origin", "private-upstream")
+    def test_explicit_visibility_skips_metadata_detection(self) -> None:
+        selected = Credentials("pat", "configured-fork", "configured-pr")
+        with mock.patch.object(
+            github_delivery, "github_repo_metadata"
+        ) as metadata, mock.patch.object(
+            github_delivery, "credentials_for", return_value=selected
+        ):
+            visibility, credentials = github_delivery.resolve_repository_access(
+                self.settings("private"), "liuppx/repo", "yeying-community/repo"
+            )
+        self.assertEqual(visibility, "private")
+        self.assertEqual(credentials, selected)
+        metadata.assert_not_called()
+
+    def test_git_mode_does_not_require_fork_token(self) -> None:
+        selected = Credentials("pat", "", "configured-pr")
+        settings = self.settings()
+        settings = Settings(
+            mode="git",
+            visibility=settings.visibility,
+            sync_script=settings.sync_script,
+            pr_script=settings.pr_script,
+            auth=settings.auth,
+            config_path=settings.config_path,
+            project=settings.project,
+            auth_table=settings.auth_table,
+        )
         with mock.patch.object(
             github_delivery,
             "github_repo_metadata",
-            side_effect=[
-                None,
-                None,
-                {"visibility": "private"},
-                {"visibility": "private"},
-            ],
+            side_effect=[{"visibility": "public"}, {"visibility": "public"}],
         ), mock.patch.object(
-            github_delivery, "credentials_for", return_value=private
+            github_delivery, "credentials_for", return_value=selected
         ) as credentials_for:
             visibility, credentials = github_delivery.resolve_repository_access(
-                self.settings(), "liuppx/repo", "yeying-community/repo"
+                settings, "liuppx/repo", "yeying-community/repo"
             )
-        self.assertEqual(visibility, "private")
-        self.assertEqual(credentials, private)
-        self.assertEqual(credentials_for.call_args.args[1], "private")
+        self.assertEqual(visibility, "public")
+        self.assertEqual(credentials, selected)
+        credentials_for.assert_called_once_with(settings, require_fork=False)
 
     def test_private_access_error_does_not_expose_token(self) -> None:
         error = github_delivery.urllib.error.HTTPError(

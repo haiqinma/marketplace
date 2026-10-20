@@ -320,7 +320,6 @@ def ensure_pull_request(
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--config")
-    parser.add_argument("--visibility", required=True, choices=("public", "private"))
     parser.add_argument("--remote", default="origin")
     parser.add_argument("--branch", default=None)
     parser.add_argument("--pr", action="store_true", help="Ensure an open PR after pushing.")
@@ -334,13 +333,21 @@ def main() -> int:
     parser.add_argument("--no-align-local-ref", action="store_true")
     args = parser.parse_args()
 
+    branch = args.branch or current_branch()
+    ensure_clean_worktree(args.allow_dirty)
+    remote_url = run_git(["remote", "get-url", args.remote])
+    repo = parse_repo(str(remote_url))
+    project_upstream_url = run_git(["remote", "get-url", args.upstream_remote])
+    project_upstream = parse_repo(str(project_upstream_url))
     try:
-        settings = load(args.config, "api")
+        settings = load(args.config, "api").resolve(
+            f"{repo.owner}/{repo.name}",
+            f"{project_upstream.owner}/{project_upstream.name}",
+        )
     except ConfigError as exc:
         raise SystemExit(str(exc)) from exc
     credentials = credentials_for(
         settings,
-        args.visibility,
         require_fork=True,
         require_pull_request=args.pr,
     )
@@ -353,11 +360,6 @@ def main() -> int:
     if args.pr and not (args.pr_title or "").strip():
         raise SystemExit("--pr-title is required with --pr so the complete delivery has an accurate title.")
 
-    branch = args.branch or current_branch()
-    ensure_clean_worktree(args.allow_dirty)
-
-    remote_url = run_git(["remote", "get-url", args.remote])
-    repo = parse_repo(str(remote_url))
     local_head = str(run_git(["rev-parse", "HEAD"]))
     tracking_ref = f"{args.remote}/{branch}"
     tracking_sha = str(run_git(["rev-parse", tracking_ref]))
