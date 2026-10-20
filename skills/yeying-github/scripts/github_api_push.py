@@ -15,7 +15,8 @@ import urllib.request
 from dataclasses import dataclass
 from typing import Any
 
-from github_config import ConfigError, Settings, load
+from github_auth import Credentials, credentials_for
+from github_config import ConfigError, load
 
 
 API_VERSION = "2022-11-28"
@@ -55,22 +56,27 @@ def parse_repo(remote_url: str) -> Repo:
     raise SystemExit(f"Unsupported GitHub remote URL: {remote_url}")
 
 
-def configure_credentials(settings: Settings, *, require_upstream: bool) -> None:
+def configure_credentials(
+    credentials: Credentials,
+    config_path: str,
+    *,
+    require_upstream: bool,
+) -> None:
     global _ORIGIN_TOKEN, _UPSTREAM_TOKEN, _CONFIG_PATH
     missing = []
-    if not settings.origin_token:
+    if not credentials.origin_token:
         missing.append("origin_token")
-    if require_upstream and not settings.upstream_token:
+    if require_upstream and not credentials.upstream_token:
         missing.append("upstream_token")
     if missing:
         raise SystemExit(
             "GitHub config missing: "
             + ", ".join(missing)
-            + f"; configure them in {settings.config_path}"
+            + f"; configure them in {config_path}"
         )
-    _ORIGIN_TOKEN = settings.origin_token
-    _UPSTREAM_TOKEN = settings.upstream_token
-    _CONFIG_PATH = str(settings.config_path)
+    _ORIGIN_TOKEN = credentials.origin_token
+    _UPSTREAM_TOKEN = credentials.upstream_token
+    _CONFIG_PATH = config_path
 
 
 def token() -> str:
@@ -314,6 +320,7 @@ def ensure_pull_request(
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--config")
+    parser.add_argument("--visibility", required=True, choices=("public", "private"))
     parser.add_argument("--remote", default="origin")
     parser.add_argument("--branch", default=None)
     parser.add_argument("--pr", action="store_true", help="Ensure an open PR after pushing.")
@@ -331,7 +338,17 @@ def main() -> int:
         settings = load(args.config, "api")
     except ConfigError as exc:
         raise SystemExit(str(exc)) from exc
-    configure_credentials(settings, require_upstream=args.pr)
+    credentials = credentials_for(
+        settings,
+        args.visibility,
+        require_origin=True,
+        require_upstream=args.pr,
+    )
+    configure_credentials(
+        credentials,
+        str(settings.config_path),
+        require_upstream=args.pr,
+    )
 
     if args.pr and not (args.pr_title or "").strip():
         raise SystemExit("--pr-title is required with --pr so the complete delivery has an accurate title.")

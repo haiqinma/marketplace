@@ -3,11 +3,15 @@
 from __future__ import annotations
 
 import ast
+import json
 import os
 import re
 import stat
+import tempfile
 from dataclasses import dataclass
 from pathlib import Path
+
+tomli = None
 
 try:
     import tomllib  # type: ignore
@@ -22,10 +26,34 @@ except ModuleNotFoundError:  # Python 3.10 and earlier
 DEFAULT_CONFIG_PATH = Path.home() / ".yeying" / "skills" / "github" / "config.toml"
 VALID_MODES = {"api", "git"}
 VALID_VISIBILITIES = {"auto", "public", "private"}
+VALID_PROVIDERS = {"pat", "github_app"}
+SECRET_KEYS = {
+    "origin_token",
+    "upstream_token",
+    "user_token",
+    "refresh_token",
+    "client_secret",
+}
 
 
 class ConfigError(RuntimeError):
     pass
+
+
+@dataclass(frozen=True)
+class GitHubAppSettings:
+    client_id: str
+    user_token: str
+    refresh_token: str
+    expires_at: str
+
+
+@dataclass(frozen=True)
+class AuthProfile:
+    provider: str
+    origin_token: str
+    upstream_token: str
+    github_app: GitHubAppSettings
 
 
 @dataclass(frozen=True)
@@ -34,22 +62,38 @@ class Settings:
     visibility: str
     sync_script: str
     pr_script: str
-    origin_token: str
-    upstream_token: str
+    public: AuthProfile
+    private: AuthProfile
     config_path: Path
+
+    def profile(self, visibility: str) -> AuthProfile:
+        if visibility == "public":
+            return self.public
+        if visibility == "private":
+            return self.private
+        raise ConfigError(f"Resolved visibility must be public or private, got: {visibility!r}")
+
+
+def _assign_nested(result: dict[str, object], path: list[str]) -> dict[str, object]:
+    current = result
+    for name in path:
+        value = current.setdefault(name, {})
+        if not isinstance(value, dict):
+            raise ValueError(f"TOML table conflicts with value: {'.'.join(path)}")
+        current = value
+    return current
 
 
 def _fallback_toml(raw: bytes) -> dict[str, object]:
-    section = None
-    result: dict[str, dict[str, object]] = {}
+    section: dict[str, object] | None = None
+    result: dict[str, object] = {}
     for line_number, raw_line in enumerate(raw.decode("utf-8").splitlines(), 1):
         line = raw_line.split("#", 1)[0].strip()
         if not line:
             continue
-        header = re.fullmatch(r"\[([A-Za-z0-9_-]+)\]", line)
+        header = re.fullmatch(r"\[([A-Za-z0-9_.-]+)\]", line)
         if header:
-            section = header.group(1)
-            result.setdefault(section, {})
+            section = _assign_nested(result, header.group(1).split("."))
             continue
         match = re.fullmatch(r"([A-Za-z0-9_-]+)\s*=\s*(.+)", line)
         if not match or section is None:
@@ -61,8 +105,19 @@ def _fallback_toml(raw: bytes) -> dict[str, object]:
             raise ValueError(f"invalid TOML value at line {line_number}") from exc
         if not isinstance(parsed, str):
             raise ValueError(f"unsupported TOML value at line {line_number}")
-        result[section][key] = parsed
+        section[key] = parsed
     return result
+
+
+def _contains_secret(value: object) -> bool:
+    if not isinstance(value, dict):
+        return False
+    for key, child in value.items():
+        if key in SECRET_KEYS and isinstance(child, str) and child.strip():
+            return True
+        if _contains_secret(child):
+            return True
+    return False
 
 
 def _read_config(path: Path, required: bool) -> dict[str, object]:
@@ -86,9 +141,46 @@ def _read_config(path: Path, required: bool) -> dict[str, object]:
     section = data.get("github", {}) if isinstance(data, dict) else {}
     if not isinstance(section, dict):
         raise ConfigError("[github] must be a TOML table")
-    if (section.get("origin_token") or section.get("upstream_token")) and mode & 0o077:
+    if _contains_secret(section) and mode & 0o077:
         raise ConfigError(f"GitHub config containing tokens must be mode 0600 or stricter: {path}")
     return section
+
+
+def _table(section: dict[str, object], name: str) -> dict[str, object]:
+    value = section.get(name, {})
+    if not isinstance(value, dict):
+        raise ConfigError(f"[github.{name}] must be a TOML table")
+    return value
+
+
+def _profile(
+    section: dict[str, object],
+    visibility: str,
+    *,
+    legacy_origin_token: str = "",
+    legacy_upstream_token: str = "",
+) -> AuthProfile:
+    profile = _table(section, visibility)
+    provider = str(profile.get("provider", "pat")).strip().lower()
+    if provider not in VALID_PROVIDERS:
+        raise ConfigError(
+            f"github.{visibility}.provider must be one of {sorted(VALID_PROVIDERS)}, "
+            f"got: {provider!r}"
+        )
+    app = profile.get("github_app", {})
+    if not isinstance(app, dict):
+        raise ConfigError(f"[github.{visibility}.github_app] must be a TOML table")
+    return AuthProfile(
+        provider=provider,
+        origin_token=str(profile.get("origin_token", legacy_origin_token)).strip(),
+        upstream_token=str(profile.get("upstream_token", legacy_upstream_token)).strip(),
+        github_app=GitHubAppSettings(
+            client_id=str(app.get("client_id", "")).strip(),
+            user_token=str(app.get("user_token", "")).strip(),
+            refresh_token=str(app.get("refresh_token", "")).strip(),
+            expires_at=str(app.get("expires_at", "")).strip(),
+        ),
+    )
 
 
 def load(
@@ -122,16 +214,82 @@ def load(
 
     sync_script = str(section.get("sync_script", "scripts/sync.sh")).strip()
     pr_script = str(section.get("pr_script", "scripts/pr.sh")).strip()
-    origin_token = str(section.get("origin_token", "")).strip()
-    upstream_token = str(section.get("upstream_token", "")).strip()
     if not sync_script or not pr_script:
         raise ConfigError("sync_script and pr_script must be non-empty paths")
+
+    # Legacy root tokens remain a public-only compatibility path. Private delivery
+    # never falls back to them, so the two visibility profiles cannot mix secrets.
+    legacy_origin = str(section.get("origin_token", "")).strip()
+    legacy_upstream = str(section.get("upstream_token", "")).strip()
     return Settings(
         mode=mode,
         visibility=visibility,
         sync_script=sync_script,
         pr_script=pr_script,
-        origin_token=origin_token,
-        upstream_token=upstream_token,
+        public=_profile(
+            section,
+            "public",
+            legacy_origin_token=legacy_origin,
+            legacy_upstream_token=legacy_upstream,
+        ),
+        private=_profile(section, "private"),
         config_path=path,
     )
+
+
+def update_github_app_tokens(
+    path: Path,
+    visibility: str,
+    *,
+    user_token: str,
+    refresh_token: str,
+    expires_at: str,
+) -> None:
+    if visibility not in {"public", "private"}:
+        raise ConfigError(f"Cannot update GitHub App tokens for visibility: {visibility!r}")
+    table = f"github.{visibility}.github_app"
+    try:
+        raw = path.read_text(encoding="utf-8")
+    except OSError as exc:
+        raise ConfigError(f"Cannot read GitHub config file {path}: {exc}") from exc
+    header = re.search(rf"(?m)^\[{re.escape(table)}\]\s*$", raw)
+    if not header:
+        if not raw or raw.endswith("\n\n"):
+            separator = ""
+        elif raw.endswith("\n"):
+            separator = "\n"
+        else:
+            separator = "\n\n"
+        raw += f"{separator}[{table}]\n"
+        header = re.search(rf"(?m)^\[{re.escape(table)}\]\s*$", raw)
+        assert header is not None
+    next_header = re.search(r"(?m)^\[[^]]+\]\s*$", raw[header.end() :])
+    table_end = header.end() + (
+        next_header.start() if next_header else len(raw) - header.end()
+    )
+    before, body, after = raw[: header.end()], raw[header.end() : table_end], raw[table_end:]
+    values = {
+        "user_token": user_token,
+        "refresh_token": refresh_token,
+        "expires_at": expires_at,
+    }
+    for key, value in values.items():
+        rendered = f"{key} = {json.dumps(value)}"
+        pattern = rf"(?m)^\s*{re.escape(key)}\s*=.*$"
+        if re.search(pattern, body):
+            body = re.sub(pattern, rendered, body)
+        else:
+            body = body.rstrip("\n") + "\n" + rendered + "\n"
+    updated = before + body + after
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fd, temp_name = tempfile.mkstemp(prefix=path.name + ".", dir=path.parent)
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as handle:
+            handle.write(updated)
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.chmod(temp_name, 0o600)
+        os.replace(temp_name, path)
+    finally:
+        if os.path.exists(temp_name):
+            os.unlink(temp_name)

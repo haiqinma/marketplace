@@ -28,7 +28,17 @@ Treat transport and visibility as independent settings:
 - `visibility = "public"` or `"private"` asserts the expected access model. Stop when either repository does not match.
 - Require origin and upstream to have the same visibility. Do not try to bridge a public repository and a private repository with this fork workflow.
 
-Override visibility with `--visibility`, `YEYING_GITHUB_VISIBILITY`, or the config file. Always run the remote visibility preflight in both API and Git modes. For private repositories, the configured `upstream_token` must read both origin and upstream; this is required to discover the private PR head and base reliably.
+Override visibility with `--visibility`, `YEYING_GITHUB_VISIBILITY`, or the config file. Always run the remote visibility preflight in both API and Git modes.
+
+Keep authentication isolated by visibility:
+
+- Read public PAT or GitHub App settings only from `[github.public]`.
+- Read private PAT or GitHub App settings only from `[github.private]`.
+- Never fall back from one visibility profile to the other. Legacy root tokens are public-only compatibility values.
+- For a private cross-owner fork PR, prefer a controlled classic PAT with `repo` scope or the bundled GitHub App user-to-server Device Flow. A fine-grained PAT may be unable to span two resource owners.
+- Do not treat an installation access token as a combined cross-owner credential; it is scoped to one installation and expires after one hour.
+
+When `provider = "github_app"`, run `scripts/github_app_login.py --visibility public|private` before delivery. The App must be installed on both repository owners, the authorizing user must access both repositories, and the App needs Metadata read, Contents read/write, and Pull requests read/write permissions. Refresh expiring user tokens through the configured refresh token without printing them.
 
 ## Workflow
 
@@ -69,6 +79,6 @@ python3 scripts/github_delivery.py --mode api --allow-dirty \
 
 ## Permission Boundary
 
-Read `origin_token` and `upstream_token` only from `~/.yeying/skills/github/config.toml` (or the file selected with `--config`/`YEYING_GITHUB_CONFIG`). Do not use ambient `GH_TOKEN`, `GITHUB_TOKEN`, or `UPSTREAM_TOKEN` as configuration. A config containing tokens must be mode `0600` or stricter. The upstream token must be able to read both private head and base repositories; a fine-grained token bound to only one resource owner may not support a PR across two private owners.
+Read PATs, GitHub App user tokens, and refresh tokens only from `~/.yeying/skills/github/config.toml` (or the file selected with `--config`/`YEYING_GITHUB_CONFIG`). Do not use ambient `GH_TOKEN`, `GITHUB_TOKEN`, or `UPSTREAM_TOKEN` as configuration. A config containing tokens must be mode `0600` or stricter. In private PAT mode, the selected upstream credential must read both private head and base repositories.
 
 Never print tokens, add collaborators, alter repository visibility, force-update refs, merge a PR, or change branch protection unless the user explicitly requests that separate operation.

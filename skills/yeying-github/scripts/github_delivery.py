@@ -17,6 +17,7 @@ import urllib.request
 from pathlib import Path
 from typing import Any
 
+from github_auth import Credentials, credentials_for
 from github_config import ConfigError, Settings, load
 
 
@@ -62,28 +63,37 @@ def parse_github_repo(remote_url: str) -> tuple[str, str]:
     raise SystemExit(f"Unsupported GitHub remote URL: {remote_url}")
 
 
-def github_repo_metadata(repo: str, auth_token: str) -> dict[str, Any]:
+def github_repo_metadata(
+    repo: str,
+    auth_token: str = "",
+    *,
+    allow_not_found: bool = False,
+) -> dict[str, Any] | None:
     owner, name = repo.split("/", 1)
     encoded_owner = urllib.parse.quote(owner, safe="")
     encoded_name = urllib.parse.quote(name, safe="")
+    headers = {
+        "Accept": "application/vnd.github+json",
+        "X-GitHub-Api-Version": API_VERSION,
+        "User-Agent": "yeying-github",
+    }
+    if auth_token:
+        headers["Authorization"] = f"Bearer {auth_token}"
     request = urllib.request.Request(
         f"https://api.github.com/repos/{encoded_owner}/{encoded_name}",
-        headers={
-            "Authorization": f"Bearer {auth_token}",
-            "Accept": "application/vnd.github+json",
-            "X-GitHub-Api-Version": API_VERSION,
-            "User-Agent": "yeying-github",
-        },
+        headers=headers,
     )
     try:
         with urllib.request.urlopen(request, timeout=30) as response:
             payload = json.loads(response.read().decode("utf-8"))
     except urllib.error.HTTPError as exc:
+        if exc.code == 404 and allow_not_found:
+            return None
         if exc.code in {401, 403, 404}:
             raise SystemExit(
-                f"Cannot read GitHub repository {repo} with upstream_token "
-                f"(HTTP {exc.code}). For private delivery, upstream_token must read both "
-                "the private origin and private upstream repositories."
+                f"Cannot read GitHub repository {repo} with the selected upstream "
+                f"credential (HTTP {exc.code}). For private delivery, the private "
+                "profile must read both origin and upstream."
             ) from exc
         raise SystemExit(f"Cannot inspect GitHub repository {repo} (HTTP {exc.code}).") from exc
     except (TimeoutError, urllib.error.URLError) as exc:
@@ -95,7 +105,9 @@ def github_repo_metadata(repo: str, auth_token: str) -> dict[str, Any]:
     return payload
 
 
-def metadata_visibility(repo: str, metadata: dict[str, Any]) -> str:
+def metadata_visibility(repo: str, metadata: dict[str, Any] | None) -> str:
+    if metadata is None:
+        raise SystemExit(f"GitHub repository is not publicly visible: {repo}")
     visibility = metadata.get("visibility")
     if visibility is None and isinstance(metadata.get("private"), bool):
         visibility = "private" if metadata["private"] else "public"
@@ -107,17 +119,12 @@ def metadata_visibility(repo: str, metadata: dict[str, Any]) -> str:
     return str(visibility)
 
 
-def resolve_repository_visibility(
-    configured: str,
+def validate_repository_pair(
+    expected: str,
     origin_repo: str,
     upstream_repo: str,
     upstream_token: str,
 ) -> str:
-    if not upstream_token:
-        raise SystemExit(
-            "GitHub config missing upstream_token; repository visibility and PR access "
-            "cannot be verified."
-        )
     origin_visibility = metadata_visibility(
         origin_repo, github_repo_metadata(origin_repo, upstream_token)
     )
@@ -130,12 +137,59 @@ def resolve_repository_visibility(
             f"({origin_repo}: {origin_visibility}, {upstream_repo}: {upstream_visibility}). "
             "The supported workflow requires repositories in the same GitHub fork network."
         )
-    if configured != "auto" and configured != origin_visibility:
+    if expected != "auto" and expected != origin_visibility:
         raise SystemExit(
-            f"Configured visibility is {configured}, but both GitHub repositories are "
+            f"Configured visibility is {expected}, but both GitHub repositories are "
             f"{origin_visibility}. Set visibility = \"{origin_visibility}\" or \"auto\"."
         )
     return origin_visibility
+
+
+def resolve_repository_access(
+    settings: Settings,
+    origin_repo: str,
+    upstream_repo: str,
+) -> tuple[str, Credentials]:
+    require_origin = settings.mode == "api"
+    if settings.visibility in {"public", "private"}:
+        credentials = credentials_for(
+            settings,
+            settings.visibility,
+            require_origin=require_origin,
+        )
+        visibility = validate_repository_pair(
+            settings.visibility,
+            origin_repo,
+            upstream_repo,
+            credentials.upstream_token,
+        )
+        return visibility, credentials
+
+    anonymous_origin = github_repo_metadata(origin_repo, allow_not_found=True)
+    anonymous_upstream = github_repo_metadata(upstream_repo, allow_not_found=True)
+    if anonymous_origin is not None and anonymous_upstream is not None:
+        origin_visibility = metadata_visibility(origin_repo, anonymous_origin)
+        upstream_visibility = metadata_visibility(upstream_repo, anonymous_upstream)
+        if origin_visibility == upstream_visibility == "public":
+            credentials = credentials_for(
+                settings,
+                "public",
+                require_origin=require_origin,
+            )
+            validate_repository_pair(
+                "public", origin_repo, upstream_repo, credentials.upstream_token
+            )
+            return "public", credentials
+
+    credentials = credentials_for(
+        settings,
+        "private",
+        require_origin=require_origin,
+    )
+    visibility = validate_repository_pair(
+        "private", origin_repo, upstream_repo, credentials.upstream_token
+    )
+    return visibility, credentials
 
 
 def validate_title(title: str) -> str:
@@ -199,12 +253,20 @@ def read_body(args: argparse.Namespace, title: str) -> str:
     return default_body(title)
 
 
-def api_command(args: argparse.Namespace, settings: Settings, title: str, body: str) -> list[str]:
+def api_command(
+    args: argparse.Namespace,
+    settings: Settings,
+    visibility: str,
+    title: str,
+    body: str,
+) -> list[str]:
     command = [
         sys.executable,
         str(Path(__file__).with_name("github_api_push.py")),
         "--config",
         str(settings.config_path.expanduser().resolve()),
+        "--visibility",
+        visibility,
         "--remote",
         "origin",
         "--branch",
@@ -318,6 +380,7 @@ def ensure_pr_with_gh(
 def deliver_git(
     args: argparse.Namespace,
     settings: Settings,
+    credentials: Credentials,
     root: Path,
     origin_repo: str,
     upstream_repo: str,
@@ -325,8 +388,6 @@ def deliver_git(
 ) -> None:
     if args.allow_dirty:
         raise SystemExit("--allow-dirty is available only in api mode; repository sync/pr scripts require a clean worktree.")
-    if not settings.upstream_token:
-        raise SystemExit(f"GitHub config missing upstream_token: {settings.config_path}")
     sync_script = resolve_script(root, settings.sync_script)
     pr_script = resolve_script(root, settings.pr_script)
     if not args.skip_sync and not sync_script.is_file():
@@ -346,7 +407,7 @@ def deliver_git(
 
     body = read_body(args, title)
     origin_owner = origin_repo.split("/", 1)[0]
-    pr_env = subprocess_env(settings.upstream_token)
+    pr_env = subprocess_env(credentials.upstream_token)
     if pr_script.is_file():
         pr_env.update(
             {
@@ -398,14 +459,12 @@ def main() -> int:
         raise SystemExit("--skip-sync is available only in git mode.")
     title = validate_title(args.title)
     root, origin_repo, upstream_repo = ensure_fork_main()
-    visibility = resolve_repository_visibility(
-        settings.visibility,
-        origin_repo,
-        upstream_repo,
-        settings.upstream_token,
+    visibility, credentials = resolve_repository_access(
+        settings, origin_repo, upstream_repo
     )
     print(f"mode: {settings.mode}")
     print(f"visibility: {visibility}")
+    print(f"authentication: {credentials.provider}")
     print(f"head: {origin_repo}:main")
     print(f"base: {upstream_repo}:main")
     print(f"title: {title}")
@@ -413,9 +472,20 @@ def main() -> int:
 
     if settings.mode == "api":
         body = read_body(args, title)
-        run(api_command(args, settings, title, body), env=subprocess_env())
+        run(
+            api_command(args, settings, visibility, title, body),
+            env=subprocess_env(),
+        )
     else:
-        deliver_git(args, settings, root, origin_repo, upstream_repo, title)
+        deliver_git(
+            args,
+            settings,
+            credentials,
+            root,
+            origin_repo,
+            upstream_repo,
+            title,
+        )
     return 0
 
 

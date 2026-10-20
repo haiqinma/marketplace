@@ -4,88 +4,125 @@
 
 ### 用途
 
-`yeying-github` 用于夜莺社区的 fork 交付流程：在贡献者个人仓库的 `main` 分支开发，发布到 `origin/main`，然后复用或创建指向社区 `upstream/main` 的 Pull Request。
-
-### 传输模式与仓库可见性
-
-- `api`：通过 GitHub API 重建并发布本地提交，适合 `git push`、SSH 或 GitHub CLI 受限的环境。
-- `git`：优先复用目标仓库的 `scripts/sync.sh` 和 `scripts/pr.sh`。
-
-传输方式与仓库可见性是两个独立配置。`mode` 决定如何发布提交；`visibility` 决定如何识别或断言仓库访问模型。推荐使用 `visibility = "auto"`。
-
-运行入口：
-
-```bash
-python3 scripts/github_delivery.py \
-  --title "feat(scope): 准确描述完整交付内容"
-```
+`yeying-github` 把贡献者个人 fork 的 `main` 发布到 `origin/main`，再复用或创建指向社区 `upstream/main` 的准确 PR。公共和私有 fork network 都支持，并可选择 GitHub API 或仓库现有 Git/gh 脚本。
 
 ### 配置
 
-默认配置文件是 `~/.yeying/skills/github/config.toml`：
+默认配置文件为 `~/.yeying/skills/github/config.toml`。其中可能保存 PAT、GitHub App 用户令牌和刷新令牌，因此权限必须保持为 `0600`。
 
 ```toml
 [github]
-mode = "api"
-visibility = "auto"
+mode = "api"                  # api | git
+visibility = "auto"           # auto | public | private
 sync_script = "scripts/sync.sh"
 pr_script = "scripts/pr.sh"
-origin_token = "<个人 fork 使用的 Token>"
-upstream_token = "<社区 PR 使用的 Token>"
+
+[github.public]
+provider = "pat"              # pat | github_app
+origin_token = "<公共个人 fork PAT>"
+upstream_token = "<公共社区 PR PAT>"
+
+[github.private]
+provider = "pat"              # pat | github_app
+origin_token = "<私有 fork classic PAT>"
+upstream_token = "<私有跨仓库 PR classic PAT>"
 ```
 
-配置文件选择优先级从高到低为：
+公共和私有认证配置是强制隔离的，两边不会互相回退。旧版 `[github].origin_token` 和 `[github].upstream_token` 仅作为公共 profile 的兼容入口，建议迁移到 `[github.public]`。
+
+配置文件选择优先级：
 
 1. `--config /绝对路径/config.toml`
 2. `YEYING_GITHUB_CONFIG`
 3. `~/.yeying/skills/github/config.toml`
 
-传输模式选择优先级从高到低为：
+传输方式选择优先级：
 
 1. `--mode api|git`
 2. `YEYING_GITHUB_MODE`
 3. `[github].mode`
 4. 默认 `api`
 
-仓库可见性选择优先级从高到低为：
+仓库可见性选择优先级：
 
 1. `--visibility auto|public|private`
 2. `YEYING_GITHUB_VISIBILITY`
 3. `[github].visibility`
 4. 默认 `auto`
 
-字段说明：
+`auto` 会先匿名检查两端仓库。如果两端都是公共仓库，则选择 `[github.public]`；否则选择 `[github.private]` 并使用私有凭证验证两端。显式 `public` 或 `private` 用于断言预期状态。每次执行都会输出传输模式、最终可见性和认证 provider，但不会输出凭证。
 
-- `mode`：`api` 通过 GitHub API 发布提交；`git` 使用仓库现有 Git/gh 脚本。
-- `visibility`：`auto` 自动检测两端仓库；`public` 或 `private` 用于断言预期状态，不匹配时停止。
-- `sync_script`：Git 模式使用的仓库相对路径或绝对路径同步脚本，默认 `scripts/sync.sh`。
-- `pr_script`：Git 模式使用的仓库相对路径或绝对路径 PR 脚本，默认 `scripts/pr.sh`。
-- `origin_token`：API 模式下读取个人 fork 并更新 `origin/main`。
-- `upstream_token`：读取 PR 的 head/base 仓库，并在社区 upstream 查询、创建或更新 PR。
-
-每次执行都会进行只读 GitHub 元数据预检，`--dry-run` 也不例外，并输出最终识别到的 `visibility: public` 或 `visibility: private`。origin 和 upstream 必须具有相同可见性。公共/私有混合会被拒绝，因为本 Skill 面向真实的 GitHub fork network。
-
-#### 公共/私有与 API/Git 选择矩阵
+### 选择矩阵
 
 | 仓库 | API 模式 | Git 模式 |
 | --- | --- | --- |
-| 公共 | `origin_token` 更新个人 fork；`upstream_token` 读取两端并管理 upstream PR | Git/SSH/HTTPS 推送个人 fork；公共 upstream 通常可匿名 fetch；`upstream_token` 管理 PR |
-| 私有 | `origin_token` 读取并更新私有 fork；`upstream_token` 读取两个私有仓库并管理 upstream PR | Git/SSH/HTTPS 凭证访问两个私有 remote；`upstream_token` 同时读取两端并管理 PR |
+| 公共 | 公共 `origin_token` 更新个人 fork；公共 `upstream_token` 管理 PR | Git 凭证推送 fork；公共 `upstream_token` 只传给 `pr.sh`/`gh` |
+| 私有 PAT | 私有 `origin_token` 更新 fork；私有 `upstream_token` 必须读取两端并管理 PR | SSH/HTTPS 凭证访问两个 remote；私有 `upstream_token` 管理 PR |
+| 私有 GitHub App | Device Flow 登录后，同一个 GitHub App 用户令牌执行 API 写入和 PR 操作 | Git 仍使用 SSH/HTTPS；App 用户令牌传给 `pr.sh`/`gh` |
 
-环境限制 `git push`、SSH 或 `gh` 时选择 `api`；仓库脚本和 Git 凭证已经配置可靠时选择 `git`。通常保持 `auto`；只有希望可见性不一致立即作为配置错误时，才显式选择 `public` 或 `private`。
+环境限制 `git push`、SSH 或 `gh` 时选择 `api`；仓库已经有可靠的 `scripts/sync.sh`、`scripts/pr.sh` 和 Git 凭证时选择 `git`。TOML 中的 Token 永远不会用于认证 `git fetch` 或 `git push`。
 
-#### 获取 GitHub Token
+### 使用 Classic PAT 提交私有 PR
 
-进入 GitHub **Settings → Developer settings → Personal access tokens**，创建 fine-grained Token；如果私有跨所有者 PR 无法由绑定单一资源所有者的 fine-grained Token 覆盖，则使用经过控制的 classic Token 或 GitHub App 凭证。
+可以。Classic PAT 能够从私有 fork 向私有 upstream 创建 PR，但必须同时满足以下条件：
 
-- origin 凭证用于 API 模式，需要访问贡献者 fork，并拥有 Metadata 读取和 Contents 读写权限。
-- upstream 凭证用于两种模式，需要读取 PR 两端仓库的 Metadata，并拥有社区仓库 Pull requests 读写权限。
-- 两个私有仓库属于不同账号或组织时，绑定单一资源所有者的 fine-grained Token 可能无法同时读取两端。应使用一个经过批准、能读取两个仓库并管理 upstream PR 的凭证。
-- 私有组织仓库还可能要求 SAML SSO 授权、PAT 审批或符合 IP allow list。未满足时，GitHub 可能返回 `403`，也可能用 `404` 隐藏私有仓库。
-- Classic PAT 对公共仓库通常需要 `public_repo`，对私有仓库通常需要 `repo`。能覆盖完整流程时，优先选择仓库范围更窄的 fine-grained Token。
-- 仓库范围和有效期应尽量收窄；交付环境变化后及时撤销或轮换。
+1. 进入 GitHub **Settings -> Developer settings -> Personal access tokens -> Tokens (classic)**。
+2. 创建有明确有效期、包含 `repo` scope 的 Token。没有 scope 的 classic PAT 只能读取公共信息。
+3. 组织启用 SAML SSO 时，为该组织授权 PAT；组织本身也必须允许 classic PAT。
+4. PAT 所属用户必须能读取两个私有仓库、推送个人 fork，并在 upstream 创建 PR。
+5. 组织、企业和仓库策略必须允许私有 fork，而且 origin 必须是同一 fork network 中的真实 fork。
+6. 凭证只写在 `[github.private]`。API 模式下，两个私有字段使用同一个经过批准的 classic PAT，是跨 owner 场景最稳定的配置。
+7. 正式交付前先执行私有 dry-run：
 
-GitHub 新建 PAT 后通常只显示一次明文。应直接保存到受保护的本地配置文件，不要粘贴到 shell 历史、Issue、PR 正文或仓库文件。
+```bash
+python3 scripts/github_delivery.py --mode api --visibility private --dry-run \
+  --title "feat(scope): 准确描述私有仓库交付内容"
+```
+
+Skill 会复用开放 PR，或者调用 `POST /repos/{upstream_owner}/{repo}/pulls`，其中 `head = "{origin_owner}:main"`、`base = "main"`。`403` 通常表示组织策略、SSO 或权限失败；`404` 通常表示凭证看不到私有仓库；`422` 通常表示两端不属于兼容的 fork network、分支没有差异，或 head 无法解析。
+
+GitHub 通常推荐 fine-grained PAT，但它绑定单一 resource owner。私有 fork 与 upstream 分属不同账号或组织时，一个 fine-grained PAT 可能无法同时看到两端。因此，这个特定的跨 owner 工作流更适合受控的 classic PAT 或 GitHub App user access token。
+
+### GitHub App
+
+Skill 已内置基于 GitHub App user-to-server Device Flow 的认证。选择这种方式是有意的：installation access token 一小时后过期，并且只属于一个 installation，无法可靠横跨“个人私有 fork installation”和“社区组织 installation”；GitHub App user access token 则可以访问“用户有权访问”且“App 已安装”的仓库交集。
+
+创建和配置 App：
+
+1. 进入 **Settings -> Developer settings -> GitHub Apps -> New GitHub App**。
+2. 配置仓库权限：**Metadata: Read**、**Contents: Read and write**、**Pull requests: Read and write**。
+3. 启用 **Device Flow**。建议保持 user-to-server Token 过期功能开启，这样 Skill 会得到八小时用户令牌和 refresh token。
+4. 将 App 安装到个人 fork 所在账号或组织，以及社区 upstream 所在组织，并选择需要的仓库。
+5. 执行授权的 GitHub 用户本身也必须能够访问两端仓库。
+6. 在配置中填写 App 的 Client ID：
+
+```toml
+[github.private]
+provider = "github_app"
+
+[github.private.github_app]
+client_id = "Iv1.xxxxxxxxxxxxxxxx"
+```
+
+7. 启动 Device Flow 登录：
+
+```bash
+python3 scripts/github_app_login.py --visibility private
+```
+
+命令会显示 GitHub 验证地址和一次性验证码。授权成功后，Skill 会把 `user_token`、`refresh_token` 和 `expires_at` 写回同一个受保护 TOML 文件。交付时会自动刷新即将过期的令牌；令牌不会打印，也不会出现在命令参数中。
+
+公共 profile 同样可以选择 `github_app`，不过公共仓库通常使用 PAT 更简单。Skill 有意不使用 PEM 私钥加 installation token 来处理跨 owner 私有 PR；这种方式更适合另行设计的服务端自动化，而且所有目标仓库必须处在对应 installation 的访问边界内。
+
+GitHub 官方参考：
+
+- [管理 Personal Access Token](https://docs.github.com/zh/authentication/keeping-your-account-and-data-secure/managing-your-personal-access-tokens)
+- [创建 Pull Request REST API](https://docs.github.com/zh/rest/pulls/pulls#create-a-pull-request)
+- [GitHub App 代表用户认证](https://docs.github.com/zh/apps/creating-github-apps/authenticating-with-a-github-app/authenticating-with-a-github-app-on-behalf-of-a-user)
+- [生成 GitHub App user access token](https://docs.github.com/zh/apps/creating-github-apps/authenticating-with-a-github-app/generating-a-user-access-token-for-a-github-app)
+- [Installation access token](https://docs.github.com/zh/apps/creating-github-apps/authenticating-with-a-github-app/generating-an-installation-access-token-for-a-github-app)
+
+### 安全边界
 
 ```bash
 mkdir -p ~/.yeying/skills/github
@@ -93,17 +130,4 @@ chmod 700 ~/.yeying/skills/github
 chmod 600 ~/.yeying/skills/github/config.toml
 ```
 
-Skill 明确忽略环境中的 `GH_TOKEN`、`GITHUB_TOKEN` 和 `UPSTREAM_TOKEN`，它们不是配置来源。Git 模式仅为兼容现有 `gh`/`pr.sh`，可能在子进程内部把配置的 `upstream_token` 临时注入为 `GH_TOKEN`。
-
-Git 模式下，TOML 中的 Token 不负责 `git fetch` 或 `git push` 认证。请为 remote URL 配置授权的 SSH key 或 HTTPS credential helper。公共 upstream 通常可以匿名 fetch；私有 origin 和 upstream 都必须具备 Git 访问权限。`origin_token` 不会注入 `sync.sh`。
-
-可先执行只读验证，不产生远程写入：
-
-```bash
-python3 scripts/github_delivery.py --mode api --visibility auto --dry-run \
-  --title "docs(scope): 准确描述完整交付内容"
-```
-
-### 安全边界
-
-Skill 不会强制推送、合并 PR、修改分支保护、添加协作者或修改仓库可见性。任何输出都不得显示 Token。更多细节见 [`references/configuration.md`](references/configuration.md)。
+Skill 不会把环境中的 `GH_TOKEN`、`GITHUB_TOKEN` 或 `UPSTREAM_TOKEN` 当作配置来源，也不会强制推送、合并 PR、修改仓库可见性、修改分支保护或添加协作者。实现细节见 [`references/configuration.md`](references/configuration.md)。

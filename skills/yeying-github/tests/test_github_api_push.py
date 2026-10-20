@@ -9,38 +9,36 @@ SCRIPTS = Path(__file__).resolve().parents[1] / "scripts"
 sys.path.insert(0, str(SCRIPTS))
 
 import github_api_push  # noqa: E402
-from github_config import Settings  # noqa: E402
+from github_auth import Credentials  # noqa: E402
 
 
 class GitHubApiPushTests(unittest.TestCase):
     def test_credentials_are_loaded_from_settings(self) -> None:
-        settings = Settings(
-            mode="api",
-            visibility="auto",
-            sync_script="scripts/sync.sh",
-            pr_script="scripts/pr.sh",
+        credentials = Credentials(
+            provider="pat",
             origin_token="configured-origin",
             upstream_token="configured-upstream",
-            config_path=Path("/secure/config.toml"),
         )
-        github_api_push.configure_credentials(settings, require_upstream=True)
+        github_api_push.configure_credentials(
+            credentials, "/secure/config.toml", require_upstream=True
+        )
         self.assertEqual(github_api_push.token(), "configured-origin")
         self.assertEqual(github_api_push.upstream_token(), "configured-upstream")
 
     def test_upstream_token_is_required_only_for_pr_operations(self) -> None:
-        settings = Settings(
-            mode="api",
-            visibility="auto",
-            sync_script="scripts/sync.sh",
-            pr_script="scripts/pr.sh",
+        credentials = Credentials(
+            provider="pat",
             origin_token="configured-origin",
             upstream_token="",
-            config_path=Path("/secure/config.toml"),
         )
-        github_api_push.configure_credentials(settings, require_upstream=False)
+        github_api_push.configure_credentials(
+            credentials, "/secure/config.toml", require_upstream=False
+        )
         self.assertEqual(github_api_push.token(), "configured-origin")
         with self.assertRaisesRegex(SystemExit, "upstream_token"):
-            github_api_push.configure_credentials(settings, require_upstream=True)
+            github_api_push.configure_credentials(
+                credentials, "/secure/config.toml", require_upstream=True
+            )
 
     def test_existing_pr_title_is_updated_without_replacing_body(self) -> None:
         source = github_api_push.Repo("liuppx", "repo")

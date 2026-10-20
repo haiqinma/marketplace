@@ -1,4 +1,4 @@
 interface:
   display_name: "夜莺 GitHub 交付"
-  short_description: "同步公开或私有 fork，并向社区 main 提交可追踪 PR"
-  default_prompt: "使用 $yeying-github 检测公开或私有仓库配置，将当前个人仓库 main 发布到 origin/main，并复用或创建指向社区 upstream/main 的 PR。"
+  short_description: "使用隔离 PAT 或 GitHub App 同步公开/私有 fork"
+  default_prompt: "使用 $yeying-github 选择公共或私有认证 profile，通过 PAT 或 GitHub App 将个人 main 发布到 origin/main，并复用或创建指向社区 upstream/main 的 PR。"
