@@ -110,6 +110,7 @@ def credentials_for(
         raise SystemExit(
             "GitHub config missing: "
             + ", ".join(missing)
-            + f"; configure them in {settings.config_path}"
+            + f"; configure github.{visibility}.token as a shared credential or "
+            + f"the missing role-specific field(s) in {settings.config_path}"
         )
     return Credentials("pat", profile.origin_token, profile.upstream_token)

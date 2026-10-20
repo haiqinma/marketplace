@@ -35,6 +35,9 @@ Keep authentication isolated by visibility:
 - Read public PAT or GitHub App settings only from `[github.public]`.
 - Read private PAT or GitHub App settings only from `[github.private]`.
 - Never fall back from one visibility profile to the other. Legacy root tokens are public-only compatibility values.
+- Within one PAT profile, use `token` when one credential legitimately covers both remote roles. Let role-specific `origin_token` or `upstream_token` override the shared value when least-privilege credentials are separate.
+- Do not describe `origin_token` as a commit credential. Commits are created locally without GitHub authentication; in API mode this credential publishes the existing objects and updates `origin/main`. In Git mode it is unused because SSH or the HTTPS credential helper authenticates Git transport.
+- For an ordinary public cross-owner fork, prefer a classic PAT with only `public_repo`; a fine-grained upstream PAT is viable only when the contributor can select that upstream resource owner and the token is approved where required.
 - For a private cross-owner fork PR, prefer a controlled classic PAT with `repo` scope or the bundled GitHub App user-to-server Device Flow. A fine-grained PAT may be unable to span two resource owners.
 - Do not treat an installation access token as a combined cross-owner credential; it is scoped to one installation and expires after one hour.
 
@@ -79,6 +82,6 @@ python3 scripts/github_delivery.py --mode api --allow-dirty \
 
 ## Permission Boundary
 
-Read PATs, GitHub App user tokens, and refresh tokens only from `~/.yeying/skills/github/config.toml` (or the file selected with `--config`/`YEYING_GITHUB_CONFIG`). Do not use ambient `GH_TOKEN`, `GITHUB_TOKEN`, or `UPSTREAM_TOKEN` as configuration. A config containing tokens must be mode `0600` or stricter. In private PAT mode, the selected upstream credential must read both private head and base repositories.
+Read PATs, GitHub App user tokens, and refresh tokens only from `~/.yeying/skills/github/config.toml` (or the file selected with `--config`/`YEYING_GITHUB_CONFIG`). Do not use ambient `GH_TOKEN`, `GITHUB_TOKEN`, or `UPSTREAM_TOKEN` as configuration. A config containing tokens must be mode `0600` or stricter. In private PAT mode, the effective upstream credential must read both private head and base repositories. For a classic PAT, require `public_repo` for public delivery or `repo` for private delivery, plus `workflow` only when committed changes modify `.github/workflows/`; never request unrelated enterprise, organization, network, package, user, hook, or key administration scopes.
 
 Never print tokens, add collaborators, alter repository visibility, force-update refs, merge a PR, or change branch protection unless the user explicitly requests that separate operation.

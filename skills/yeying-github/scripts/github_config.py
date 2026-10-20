@@ -28,6 +28,7 @@ VALID_MODES = {"api", "git"}
 VALID_VISIBILITIES = {"auto", "public", "private"}
 VALID_PROVIDERS = {"pat", "github_app"}
 SECRET_KEYS = {
+    "token",
     "origin_token",
     "upstream_token",
     "user_token",
@@ -170,10 +171,15 @@ def _profile(
     app = profile.get("github_app", {})
     if not isinstance(app, dict):
         raise ConfigError(f"[github.{visibility}.github_app] must be a TOML table")
+    shared_token = str(profile.get("token", "")).strip()
     return AuthProfile(
         provider=provider,
-        origin_token=str(profile.get("origin_token", legacy_origin_token)).strip(),
-        upstream_token=str(profile.get("upstream_token", legacy_upstream_token)).strip(),
+        origin_token=str(
+            profile.get("origin_token", shared_token or legacy_origin_token)
+        ).strip(),
+        upstream_token=str(
+            profile.get("upstream_token", shared_token or legacy_upstream_token)
+        ).strip(),
         github_app=GitHubAppSettings(
             client_id=str(app.get("client_id", "")).strip(),
             user_token=str(app.get("user_token", "")).strip(),

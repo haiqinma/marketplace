@@ -94,6 +94,50 @@ class GitHubConfigTests(unittest.TestCase):
         self.assertEqual(settings.private.origin_token, "private-origin")
         self.assertEqual(settings.private.upstream_token, "private-upstream")
 
+    def test_shared_token_populates_both_roles(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            config = Path(directory) / "config.toml"
+            config.write_text(
+                '[github.public]\ntoken = "public-shared"\n'
+                '[github.private]\ntoken = "private-shared"\n',
+                encoding="utf-8",
+            )
+            config.chmod(0o600)
+            settings = load(config)
+        self.assertEqual(settings.public.origin_token, "public-shared")
+        self.assertEqual(settings.public.upstream_token, "public-shared")
+        self.assertEqual(settings.private.origin_token, "private-shared")
+        self.assertEqual(settings.private.upstream_token, "private-shared")
+
+    def test_shared_token_does_not_cross_visibility_profiles(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            config = Path(directory) / "config.toml"
+            config.write_text(
+                '[github.public]\ntoken = "public-shared"\n', encoding="utf-8"
+            )
+            config.chmod(0o600)
+            settings = load(config)
+        self.assertEqual(settings.public.origin_token, "public-shared")
+        self.assertEqual(settings.private.origin_token, "")
+        self.assertEqual(settings.private.upstream_token, "")
+
+    def test_role_tokens_override_shared_token_independently(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            config = Path(directory) / "config.toml"
+            config.write_text(
+                '[github.public]\ntoken = "shared"\n'
+                'origin_token = "origin-only"\n'
+                '[github.private]\ntoken = "private-shared"\n'
+                'upstream_token = "upstream-only"\n',
+                encoding="utf-8",
+            )
+            config.chmod(0o600)
+            settings = load(config)
+        self.assertEqual(settings.public.origin_token, "origin-only")
+        self.assertEqual(settings.public.upstream_token, "shared")
+        self.assertEqual(settings.private.origin_token, "private-shared")
+        self.assertEqual(settings.private.upstream_token, "upstream-only")
+
     def test_legacy_tokens_are_public_only(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             config = Path(directory) / "config.toml"
@@ -168,6 +212,16 @@ class GitHubConfigTests(unittest.TestCase):
             config = Path(directory) / "config.toml"
             config.write_text(
                 '[github.private]\norigin_token = "secret"\n', encoding="utf-8"
+            )
+            config.chmod(0o644)
+            with self.assertRaisesRegex(ConfigError, "0600"):
+                load(config)
+
+    def test_rejects_shared_token_readable_by_group_or_others(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            config = Path(directory) / "config.toml"
+            config.write_text(
+                '[github.private]\ntoken = "secret"\n', encoding="utf-8"
             )
             config.chmod(0o644)
             with self.assertRaisesRegex(ConfigError, "0600"):
