@@ -24,17 +24,22 @@ sync_script = "scripts/sync.sh"
 pr_script = "scripts/pr.sh"
 
 [github.public]
-provider = "pat"              # pat | github_app
 fork_token = "<PAT that publishes the public personal fork>"
 pull_request_token = "<PAT that creates the public upstream PR>"
 
 [github.private]
-provider = "pat"              # pat | github_app
 fork_token = "<PAT that publishes the private personal fork>"
 pull_request_token = "<PAT that reads both private repositories and creates the PR>"
 ```
 
-A PAT profile accepts only `fork_token` and `pull_request_token`. There is no shared `token`, no support for former field names, and no credential may be placed directly under `[github]`. Unsupported keys fail immediately with the allowed field list instead of being silently ignored.
+Authentication is inferred from the fields in each visibility profile; there is no `provider` setting:
+
+- A non-empty `fork_token` or `pull_request_token` selects PAT authentication.
+- A `[github.<visibility>.github_app]` table selects GitHub App authentication.
+- Configuring non-empty PAT fields and a GitHub App table in the same profile is an error.
+- An empty profile defaults internally to PAT so a later command can report the specific missing token.
+
+A PAT profile accepts only `fork_token` and `pull_request_token`. There is no shared `token`, no support for former field names, and no credential may be placed directly under `[github]`. `provider` and all other unsupported keys fail immediately with the allowed field list instead of being silently ignored.
 
 ### Token Responsibilities
 
@@ -49,7 +54,6 @@ When one classic PAT covers both roles, place the same value explicitly in both 
 
 ```toml
 [github.public]
-provider = "pat"
 fork_token = "<the same classic PAT>"
 pull_request_token = "<the same classic PAT>"
 ```
@@ -89,7 +93,7 @@ Keep the recommended setting:
 visibility = "auto"
 ```
 
-The Skill first reads origin and upstream metadata anonymously. If both are anonymously readable and public, it selects `[github.public]`. Otherwise it loads `[github.private].pull_request_token` and verifies both repositories again. If authenticated access still fails, delivery stops instead of confusing a missing repository, insufficient permission, and a private repository.
+The Skill first reads origin and upstream metadata anonymously. If both are anonymously readable and public, it selects `[github.public]`. Otherwise it resolves authentication from `[github.private]` and verifies both repositories again. If authenticated access still fails, delivery stops instead of confusing a missing repository, insufficient permission, and a private repository.
 
 Explicit `public` or `private` is an assertion, not a way to skip metadata verification. Delivery also stops when origin and upstream have different visibility.
 
@@ -99,7 +103,6 @@ The simplest setup for an ordinary external contributor is one **Token (classic)
 
 ```toml
 [github.public]
-provider = "pat"
 fork_token = "<classic PAT: public_repo>"
 pull_request_token = "<classic PAT: public_repo>"
 ```
@@ -108,7 +111,6 @@ For two fine-grained PATs:
 
 ```toml
 [github.public]
-provider = "pat"
 fork_token = "<personal owner; select only the personal fork>"
 pull_request_token = "<community organization; select only upstream>"
 ```
@@ -124,7 +126,6 @@ For a private fork and upstream under different resource owners, prefer one **To
 
 ```toml
 [github.private]
-provider = "pat"
 fork_token = "<classic PAT: repo>"
 pull_request_token = "<classic PAT: repo>"
 ```
@@ -179,12 +180,11 @@ Classic PATs cannot be limited to selected repositories like fine-grained PATs. 
 GitHub App authentication uses user-to-server Device Flow. One App user token covers both fork and PR roles, so PAT fields are not configured:
 
 ```toml
-[github.private]
-provider = "github_app"
-
 [github.private.github_app]
 client_id = "Iv1.xxxxxxxxxxxxxxxx"
 ```
+
+The `github_app` table itself selects GitHub App authentication. Do not add `provider`, `fork_token`, or `pull_request_token` to the same profile.
 
 The App needs **Metadata: Read**, **Contents: Read and write**, and **Pull requests: Read and write**, and it must be installed on both the fork and upstream sides. The authorizing user must also access both repositories.
 

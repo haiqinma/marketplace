@@ -83,7 +83,7 @@ def main() -> int:
         raise SystemExit(str(exc)) from exc
     if profile.provider != "github_app":
         raise SystemExit(
-            f"github.{args.visibility}.provider must be \"github_app\" before login."
+            f"Configure [github.{args.visibility}.github_app] before login."
         )
     client_id = profile.github_app.client_id
     if not client_id:

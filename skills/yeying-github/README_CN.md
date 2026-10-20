@@ -24,17 +24,22 @@ sync_script = "scripts/sync.sh"
 pr_script = "scripts/pr.sh"
 
 [github.public]
-provider = "pat"              # pat | github_app
 fork_token = "<发布个人公共 fork 的 PAT>"
 pull_request_token = "<创建公共 upstream PR 的 PAT>"
 
 [github.private]
-provider = "pat"              # pat | github_app
 fork_token = "<发布个人私有 fork 的 PAT>"
 pull_request_token = "<读取两端私有仓库并创建 PR 的 PAT>"
 ```
 
-PAT profile 只接受 `fork_token` 和 `pull_request_token`。没有共享 `token`，也不接受旧字段或放在 `[github]` 根表中的凭证。发现不支持的字段时，Skill 会立即报错并列出允许的字段，避免配置被静默忽略。
+每个可见性 profile 会根据已有字段自动推断认证方式，不需要 `provider`：
+
+- 非空 `fork_token` 或 `pull_request_token` 表示使用 PAT。
+- 存在 `[github.<visibility>.github_app]` 子表表示使用 GitHub App。
+- 同一个 profile 同时配置非空 PAT 字段和 GitHub App 子表会直接报配置冲突。
+- profile 为空时，内部默认按 PAT 处理，以便后续命令准确提示缺少哪个 Token。
+
+PAT profile 只接受 `fork_token` 和 `pull_request_token`。没有共享 `token`，也不接受旧字段或放在 `[github]` 根表中的凭证。`provider` 和其他不支持的字段都会立即报错并列出允许的字段，避免配置被静默忽略。
 
 ### 两个字段的职责
 
@@ -49,7 +54,6 @@ PAT profile 只接受 `fork_token` 和 `pull_request_token`。没有共享 `toke
 
 ```toml
 [github.public]
-provider = "pat"
 fork_token = "<同一个 Classic PAT>"
 pull_request_token = "<同一个 Classic PAT>"
 ```
@@ -89,7 +93,7 @@ mode = "git"
 visibility = "auto"
 ```
 
-Skill 先匿名读取 origin 和 upstream 元数据。两端都能匿名读取且为 public 时选择 `[github.public]`；否则加载 `[github.private].pull_request_token` 重新验证两端。认证后仍不可见时会停止，不会把“仓库不存在”“Token 无权限”和“私有仓库”混为一谈。
+Skill 先匿名读取 origin 和 upstream 元数据。两端都能匿名读取且为 public 时选择 `[github.public]`；否则根据 `[github.private]` 自动解析认证并重新验证两端。认证后仍不可见时会停止，不会把“仓库不存在”“Token 无权限”和“私有仓库”混为一谈。
 
 显式 `public` 或 `private` 是断言，不会跳过 GitHub 元数据验证。两端可见性不同也会停止。
 
@@ -99,7 +103,6 @@ Skill 先匿名读取 origin 和 upstream 元数据。两端都能匿名读取�
 
 ```toml
 [github.public]
-provider = "pat"
 fork_token = "<Classic PAT: public_repo>"
 pull_request_token = "<Classic PAT: public_repo>"
 ```
@@ -108,7 +111,6 @@ pull_request_token = "<Classic PAT: public_repo>"
 
 ```toml
 [github.public]
-provider = "pat"
 fork_token = "<个人账号、只选择个人 fork>"
 pull_request_token = "<社区组织、只选择 upstream>"
 ```
@@ -124,7 +126,6 @@ Fine-grained PAT 绑定一个 resource owner。成为另一个个人账号仓库
 
 ```toml
 [github.private]
-provider = "pat"
 fork_token = "<Classic PAT: repo>"
 pull_request_token = "<Classic PAT: repo>"
 ```
@@ -179,12 +180,11 @@ Classic PAT 不能像 Fine-grained PAT 一样按仓库收窄。请设置较短�
 GitHub App 使用 user-to-server Device Flow，一个 App 用户令牌同时承担 fork 和 PR 两个职责，不配置 PAT 字段：
 
 ```toml
-[github.private]
-provider = "github_app"
-
 [github.private.github_app]
 client_id = "Iv1.xxxxxxxxxxxxxxxx"
 ```
+
+`github_app` 子表本身就表示使用 GitHub App；不要在同一个 profile 中再配置 `provider`、`fork_token` 或 `pull_request_token`。
 
 App 需要 **Metadata: Read**、**Contents: Read and write**、**Pull requests: Read and write**，并安装到 fork 和 upstream 两边。授权用户本身也必须访问两端仓库。
 

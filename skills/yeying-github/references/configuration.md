@@ -12,33 +12,30 @@ sync_script = "scripts/sync.sh"
 pr_script = "scripts/pr.sh"
 
 [github.public]
-provider = "pat"
 fork_token = ""
 pull_request_token = ""
 
 [github.private]
-provider = "pat"
 fork_token = ""
 pull_request_token = ""
 ```
 
-PAT profile 只允许：
+每个 profile 顶层只允许：
 
 ```text
-provider
 fork_token
 pull_request_token
 github_app
 ```
 
-不存在共享 `token` 或字段回退。凭证不得放在 `[github]` 根表。所有未知字段都会触发 `ConfigError`，不会被静默忽略。
+不存在共享 `token` 或字段回退。凭证不得放在 `[github]` 根表。`provider` 和所有其他未知字段都会触发 `ConfigError`，不会被静默忽略。
 
 两个 profile 完全隔离：
 
 - 公共交付只读取 `[github.public]`。
 - 私有交付只读取 `[github.private]`。
 - 自动检测为公共时，不加载私有凭证。
-- 自动检测无法匿名读取两端时，使用私有 `pull_request_token` 验证两端。
+- 自动检测无法匿名读取两端时，解析私有 profile 的认证并验证两端。
 
 ## PAT 职责
 
@@ -51,19 +48,20 @@ API 模式要求两个字段。Git 模式允许 `fork_token` 为空，但仍要�
 
 同一个 PAT 覆盖两个职责时，两个字段填写同一个值。实现不做隐式共享，以便错误信息和权限审计始终指向具体职责。
 
-## Provider
+## 认证方式自动推断
 
-每个 profile 的 `provider` 可以是：
+用户不配置 `provider`。每个公共或私有 profile 独立按以下规则推断：
 
-- `pat`：使用 `fork_token` 和 `pull_request_token`。
-- `github_app`：通过 Device Flow 获取一个 user access token，运行时把它同时映射为 fork 与 PR 凭证。
+1. 非空 `fork_token` 或 `pull_request_token` 表示 PAT。
+2. 存在 `[github.<visibility>.github_app]` 子表表示 GitHub App。
+3. 同一个 profile 同时包含非空 PAT 字段和 GitHub App 子表时触发 `ConfigError`。
+4. 两者都没有时内部按 PAT 处理，让具体操作准确报告缺少 `fork_token` 或 `pull_request_token`。
 
-GitHub App 配置：
+PAT 字段即使只配置一个也会选择 PAT，具体执行模式仍会检查自己需要的字段。空字符串不算已配置的 PAT，因此可以保留空的 PAT 占位值后改用 GitHub App，但推荐直接删除无用字段以保持配置清楚。
+
+GitHub App 通过 Device Flow 获取一个 user access token，运行时把它同时映射为 fork 与 PR 凭证。配置示例：
 
 ```toml
-[github.private]
-provider = "github_app"
-
 [github.private.github_app]
 client_id = "Iv1.xxxxxxxxxxxxxxxx"
 user_token = ""       # github_app_login.py 写入
@@ -85,7 +83,7 @@ python3 scripts/github_app_login.py --visibility private
 
 1. 不带认证读取 origin 和 upstream 元数据。
 2. 两端都可读且为 public 时选择公共 profile。
-3. 任一端无法匿名读取时选择私有 profile，使用其 `pull_request_token` 重新读取两端。
+3. 任一端无法匿名读取时选择私有 profile，解析其 PAT 或 GitHub App 认证后重新读取两端。
 4. 两端实际可见性不同、显式断言不匹配，或凭证看不到任一私有仓库时停止。
 
 显式 `public` 或 `private` 只决定预期 profile，仍会读取 GitHub 元数据验证。
@@ -96,7 +94,6 @@ Classic PAT：
 
 ```toml
 [github.public]
-provider = "pat"
 fork_token = "<public_repo PAT>"
 pull_request_token = "<同一个 public_repo PAT>"
 ```
@@ -117,7 +114,6 @@ Fine-grained PAT：
 
 ```toml
 [github.private]
-provider = "pat"
 fork_token = "<repo PAT>"
 pull_request_token = "<同一个 repo PAT>"
 ```

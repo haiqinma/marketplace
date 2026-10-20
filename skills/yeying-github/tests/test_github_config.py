@@ -128,11 +128,31 @@ class GitHubConfigTests(unittest.TestCase):
             with self.assertRaisesRegex(ConfigError, "Unsupported key.*fork_token"):
                 load(config)
 
+    def test_rejects_provider_field(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            config = Path(directory) / "config.toml"
+            config.write_text(
+                '[github.public]\nprovider = "pat"\n', encoding="utf-8"
+            )
+            with self.assertRaisesRegex(ConfigError, "Unsupported key.*provider"):
+                load(config)
+
+    def test_rejects_pat_and_github_app_in_same_profile(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            config = Path(directory) / "config.toml"
+            config.write_text(
+                '[github.private]\nfork_token = "private-fork"\n'
+                '[github.private.github_app]\nclient_id = "Iv1.test"\n',
+                encoding="utf-8",
+            )
+            config.chmod(0o600)
+            with self.assertRaisesRegex(ConfigError, "both PAT and GitHub App"):
+                load(config)
+
     def test_loads_github_app_profile(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             config = Path(directory) / "config.toml"
             config.write_text(
-                '[github.private]\nprovider = "github_app"\n'
                 '[github.private.github_app]\nclient_id = "Iv1.test"\n'
                 'user_token = "app-user-token"\nexpires_at = "9999999999"\n',
                 encoding="utf-8",
@@ -143,13 +163,23 @@ class GitHubConfigTests(unittest.TestCase):
         self.assertEqual(settings.private.github_app.client_id, "Iv1.test")
         self.assertEqual(settings.private.github_app.user_token, "app-user-token")
 
+    def test_empty_pat_placeholders_do_not_conflict_with_github_app(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            config = Path(directory) / "config.toml"
+            config.write_text(
+                '[github.private]\nfork_token = ""\npull_request_token = ""\n'
+                '[github.private.github_app]\nclient_id = "Iv1.test"\n',
+                encoding="utf-8",
+            )
+            settings = load(config)
+        self.assertEqual(settings.private.provider, "github_app")
+        self.assertEqual(settings.private.github_app.client_id, "Iv1.test")
+
     def test_fallback_parser_supports_nested_profiles(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             config = Path(directory) / "config.toml"
             config.write_text(
-                '[github.public]\nprovider = "pat"\n'
-                'fork_token = "public-fork"\n'
-                '[github.private]\nprovider = "github_app"\n'
+                '[github.public]\nfork_token = "public-fork"\n'
                 '[github.private.github_app]\nclient_id = "Iv1.test"\n',
                 encoding="utf-8",
             )
@@ -166,7 +196,6 @@ class GitHubConfigTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             config = Path(directory) / "config.toml"
             config.write_text(
-                '[github.private]\nprovider = "github_app"\n'
                 '[github.private.github_app]\nclient_id = "Iv1.test"\n',
                 encoding="utf-8",
             )

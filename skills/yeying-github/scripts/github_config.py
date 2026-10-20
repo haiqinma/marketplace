@@ -26,7 +26,6 @@ except ModuleNotFoundError:  # Python 3.10 and earlier
 DEFAULT_CONFIG_PATH = Path.home() / ".yeying" / "skills" / "github" / "config.toml"
 VALID_MODES = {"api", "git"}
 VALID_VISIBILITIES = {"auto", "public", "private"}
-VALID_PROVIDERS = {"pat", "github_app"}
 SECRET_KEYS = {
     "fork_token",
     "pull_request_token",
@@ -172,14 +171,17 @@ def _profile(
     profile = _table(section, visibility)
     _reject_unknown(
         profile,
-        {"provider", "fork_token", "pull_request_token", "github_app"},
+        {"fork_token", "pull_request_token", "github_app"},
         f"github.{visibility}",
     )
-    provider = str(profile.get("provider", "pat")).strip().lower()
-    if provider not in VALID_PROVIDERS:
+    fork_token = str(profile.get("fork_token", "")).strip()
+    pull_request_token = str(profile.get("pull_request_token", "")).strip()
+    app_configured = "github_app" in profile
+    pat_configured = bool(fork_token or pull_request_token)
+    if app_configured and pat_configured:
         raise ConfigError(
-            f"github.{visibility}.provider must be one of {sorted(VALID_PROVIDERS)}, "
-            f"got: {provider!r}"
+            f"[github.{visibility}] configures both PAT and GitHub App authentication; "
+            "keep either fork_token/pull_request_token or github_app"
         )
     app = profile.get("github_app", {})
     if not isinstance(app, dict):
@@ -190,9 +192,9 @@ def _profile(
         f"github.{visibility}.github_app",
     )
     return AuthProfile(
-        provider=provider,
-        fork_token=str(profile.get("fork_token", "")).strip(),
-        pull_request_token=str(profile.get("pull_request_token", "")).strip(),
+        provider="github_app" if app_configured else "pat",
+        fork_token=fork_token,
+        pull_request_token=pull_request_token,
         github_app=GitHubAppSettings(
             client_id=str(app.get("client_id", "")).strip(),
             user_token=str(app.get("user_token", "")).strip(),

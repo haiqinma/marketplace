@@ -35,7 +35,8 @@ Keep authentication isolated by visibility:
 - Read public PAT or GitHub App settings only from `[github.public]`.
 - Read private PAT or GitHub App settings only from `[github.private]`.
 - Never fall back from one visibility profile to the other, and never read PAT credentials from the `[github]` root table.
-- PAT profiles use only `fork_token` and `pull_request_token`. Do not accept a shared `token`, the former `origin_token`/`upstream_token` names, or credentials placed directly under `[github]`.
+- Infer authentication from each visibility profile. Non-empty `fork_token` or `pull_request_token` selects PAT authentication; the presence of `[github.<visibility>.github_app]` selects GitHub App authentication. Reject a profile that contains both non-empty PAT credentials and a GitHub App table, and reject a user-supplied `provider` field.
+- PAT authentication uses only `fork_token` and `pull_request_token`. Do not accept a shared `token`, the former `origin_token`/`upstream_token` names, or credentials placed directly under `[github]`.
 - Do not describe `fork_token` as a commit credential. Commits are created locally without GitHub authentication; in API mode this credential publishes the existing objects and updates `origin/main`. In Git mode it is unused because SSH or the HTTPS credential helper authenticates Git transport.
 - `pull_request_token` reads repository metadata and lists, creates, or updates the community PR. It is also the PAT used for authenticated private-repository visibility checks.
 - When one PAT covers both roles, place the same value in both explicit fields. Keep the names separate so each permission and execution path remains obvious.
@@ -43,7 +44,7 @@ Keep authentication isolated by visibility:
 - For a private cross-owner fork PR, prefer a controlled classic PAT with `repo` scope or the bundled GitHub App user-to-server Device Flow. A fine-grained PAT may be unable to span two resource owners.
 - Do not treat an installation access token as a combined cross-owner credential; it is scoped to one installation and expires after one hour.
 
-When `provider = "github_app"`, run `scripts/github_app_login.py --visibility public|private` before delivery. The App must be installed on both repository owners, the authorizing user must access both repositories, and the App needs Metadata read, Contents read/write, and Pull requests read/write permissions. Refresh expiring user tokens through the configured refresh token without printing them.
+When a profile contains `[github.<visibility>.github_app]`, run `scripts/github_app_login.py --visibility public|private` before delivery. The App must be installed on both repository owners, the authorizing user must access both repositories, and the App needs Metadata read, Contents read/write, and Pull requests read/write permissions. Refresh expiring user tokens through the configured refresh token without printing them.
 
 ## Workflow
 
@@ -66,7 +67,7 @@ Use `--body-file` when a reviewed PR body already exists. Otherwise the wrapper 
 
 ```bash
 # Configured/default transport
-python3 scripts/github_delivery.py --title "fix(router): preserve provider failover state"
+python3 scripts/github_delivery.py --title "fix(router): preserve remote failover state"
 
 # Force GitHub API transport
 python3 scripts/github_delivery.py --mode api --dry-run \
