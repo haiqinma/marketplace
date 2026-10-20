@@ -20,8 +20,8 @@ from github_config import ConfigError, load
 
 
 API_VERSION = "2022-11-28"
-_ORIGIN_TOKEN = ""
-_UPSTREAM_TOKEN = ""
+_FORK_TOKEN = ""
+_PULL_REQUEST_TOKEN = ""
 _CONFIG_PATH = "~/.yeying/skills/github/config.toml"
 
 
@@ -60,35 +60,35 @@ def configure_credentials(
     credentials: Credentials,
     config_path: str,
     *,
-    require_upstream: bool,
+    require_pull_request: bool,
 ) -> None:
-    global _ORIGIN_TOKEN, _UPSTREAM_TOKEN, _CONFIG_PATH
+    global _FORK_TOKEN, _PULL_REQUEST_TOKEN, _CONFIG_PATH
     missing = []
-    if not credentials.origin_token:
-        missing.append("origin_token")
-    if require_upstream and not credentials.upstream_token:
-        missing.append("upstream_token")
+    if not credentials.fork_token:
+        missing.append("fork_token")
+    if require_pull_request and not credentials.pull_request_token:
+        missing.append("pull_request_token")
     if missing:
         raise SystemExit(
             "GitHub config missing: "
             + ", ".join(missing)
             + f"; configure them in {config_path}"
         )
-    _ORIGIN_TOKEN = credentials.origin_token
-    _UPSTREAM_TOKEN = credentials.upstream_token
+    _FORK_TOKEN = credentials.fork_token
+    _PULL_REQUEST_TOKEN = credentials.pull_request_token
     _CONFIG_PATH = config_path
 
 
-def token() -> str:
-    if not _ORIGIN_TOKEN:
-        raise SystemExit(f"GitHub origin_token is not loaded from {_CONFIG_PATH}.")
-    return _ORIGIN_TOKEN
+def fork_token() -> str:
+    if not _FORK_TOKEN:
+        raise SystemExit(f"GitHub fork_token is not loaded from {_CONFIG_PATH}.")
+    return _FORK_TOKEN
 
 
-def upstream_token() -> str:
-    if not _UPSTREAM_TOKEN:
-        raise SystemExit(f"GitHub upstream_token is not loaded from {_CONFIG_PATH}.")
-    return _UPSTREAM_TOKEN
+def pull_request_token() -> str:
+    if not _PULL_REQUEST_TOKEN:
+        raise SystemExit(f"GitHub pull_request_token is not loaded from {_CONFIG_PATH}.")
+    return _PULL_REQUEST_TOKEN
 
 
 def gh(
@@ -102,7 +102,7 @@ def gh(
     url = f"https://api.github.com/repos/{repo.owner}/{repo.name}{path}"
     data = json.dumps(body).encode() if body is not None else None
     headers = {
-        "Authorization": f"Bearer {auth_token or token()}",
+        "Authorization": f"Bearer {auth_token or fork_token()}",
         "Accept": "application/vnd.github+json",
         "X-GitHub-Api-Version": API_VERSION,
         "Content-Type": "application/json",
@@ -266,7 +266,7 @@ def ensure_pull_request(
     body: str,
     dry_run: bool,
 ) -> None:
-    pr_token = upstream_token()
+    pr_token = pull_request_token()
     body = normalize_pr_body(body)
     head = f"{source_repo.owner}:{source_branch}"
     query = urllib.parse.urlencode(
@@ -341,13 +341,13 @@ def main() -> int:
     credentials = credentials_for(
         settings,
         args.visibility,
-        require_origin=True,
-        require_upstream=args.pr,
+        require_fork=True,
+        require_pull_request=args.pr,
     )
     configure_credentials(
         credentials,
         str(settings.config_path),
-        require_upstream=args.pr,
+        require_pull_request=args.pr,
     )
 
     if args.pr and not (args.pr_title or "").strip():

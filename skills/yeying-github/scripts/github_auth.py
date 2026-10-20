@@ -16,8 +16,8 @@ from github_config import AuthProfile, Settings, update_github_app_tokens
 @dataclass(frozen=True)
 class Credentials:
     provider: str
-    origin_token: str
-    upstream_token: str
+    fork_token: str
+    pull_request_token: str
 
 
 def _oauth_post(values: dict[str, str]) -> dict[str, Any]:
@@ -94,23 +94,22 @@ def credentials_for(
     settings: Settings,
     visibility: str,
     *,
-    require_origin: bool = True,
-    require_upstream: bool = True,
+    require_fork: bool = True,
+    require_pull_request: bool = True,
 ) -> Credentials:
     profile = settings.profile(visibility)
     if profile.provider == "github_app":
         token = _app_user_token(settings, visibility, profile)
         return Credentials("github_app", token, token)
     missing = []
-    if require_origin and not profile.origin_token:
-        missing.append(f"github.{visibility}.origin_token")
-    if require_upstream and not profile.upstream_token:
-        missing.append(f"github.{visibility}.upstream_token")
+    if require_fork and not profile.fork_token:
+        missing.append(f"github.{visibility}.fork_token")
+    if require_pull_request and not profile.pull_request_token:
+        missing.append(f"github.{visibility}.pull_request_token")
     if missing:
         raise SystemExit(
             "GitHub config missing: "
             + ", ".join(missing)
-            + f"; configure github.{visibility}.token as a shared credential or "
-            + f"the missing role-specific field(s) in {settings.config_path}"
+            + f"; configure the missing field(s) in {settings.config_path}"
         )
-    return Credentials("pat", profile.origin_token, profile.upstream_token)
+    return Credentials("pat", profile.fork_token, profile.pull_request_token)

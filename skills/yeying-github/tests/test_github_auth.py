@@ -28,24 +28,24 @@ class GitHubAuthTests(unittest.TestCase):
     def test_pat_profiles_do_not_fall_back_to_each_other(self) -> None:
         empty_app = GitHubAppSettings("", "", "", "")
         configured = settings(
-            AuthProfile("pat", "public-origin", "public-upstream", empty_app),
+            AuthProfile("pat", "public-fork", "public-pr", empty_app),
             AuthProfile("pat", "", "", empty_app),
         )
         public = github_auth.credentials_for(configured, "public")
-        self.assertEqual(public.origin_token, "public-origin")
-        with self.assertRaisesRegex(SystemExit, "github.private.origin_token"):
+        self.assertEqual(public.fork_token, "public-fork")
+        with self.assertRaisesRegex(SystemExit, "github.private.fork_token"):
             github_auth.credentials_for(configured, "private")
 
-    def test_git_mode_can_omit_origin_pat(self) -> None:
+    def test_git_mode_can_omit_fork_pat(self) -> None:
         empty_app = GitHubAppSettings("", "", "", "")
         configured = settings(
-            AuthProfile("pat", "", "public-upstream", empty_app),
+            AuthProfile("pat", "", "public-pr", empty_app),
             AuthProfile("pat", "", "", empty_app),
         )
         credentials = github_auth.credentials_for(
-            configured, "public", require_origin=False
+            configured, "public", require_fork=False
         )
-        self.assertEqual(credentials.upstream_token, "public-upstream")
+        self.assertEqual(credentials.pull_request_token, "public-pr")
 
     def test_github_app_uses_current_user_token_for_both_repositories(self) -> None:
         empty_app = GitHubAppSettings("", "", "", "")
@@ -56,8 +56,8 @@ class GitHubAuthTests(unittest.TestCase):
         )
         credentials = github_auth.credentials_for(configured, "private")
         self.assertEqual(credentials.provider, "github_app")
-        self.assertEqual(credentials.origin_token, "app-user-token")
-        self.assertEqual(credentials.upstream_token, "app-user-token")
+        self.assertEqual(credentials.fork_token, "app-user-token")
+        self.assertEqual(credentials.pull_request_token, "app-user-token")
 
     def test_expired_github_app_token_is_refreshed_and_stored(self) -> None:
         empty_app = GitHubAppSettings("", "", "", "")
@@ -76,7 +76,7 @@ class GitHubAuthTests(unittest.TestCase):
             },
         ), mock.patch.object(github_auth, "update_github_app_tokens") as update:
             credentials = github_auth.credentials_for(configured, "private")
-        self.assertEqual(credentials.origin_token, "new-user-token")
+        self.assertEqual(credentials.fork_token, "new-user-token")
         update.assert_called_once()
 
 

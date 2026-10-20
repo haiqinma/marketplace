@@ -16,28 +16,28 @@ class GitHubApiPushTests(unittest.TestCase):
     def test_credentials_are_loaded_from_settings(self) -> None:
         credentials = Credentials(
             provider="pat",
-            origin_token="configured-origin",
-            upstream_token="configured-upstream",
+            fork_token="configured-fork",
+            pull_request_token="configured-pr",
         )
         github_api_push.configure_credentials(
-            credentials, "/secure/config.toml", require_upstream=True
+            credentials, "/secure/config.toml", require_pull_request=True
         )
-        self.assertEqual(github_api_push.token(), "configured-origin")
-        self.assertEqual(github_api_push.upstream_token(), "configured-upstream")
+        self.assertEqual(github_api_push.fork_token(), "configured-fork")
+        self.assertEqual(github_api_push.pull_request_token(), "configured-pr")
 
-    def test_upstream_token_is_required_only_for_pr_operations(self) -> None:
+    def test_pull_request_token_is_required_only_for_pr_operations(self) -> None:
         credentials = Credentials(
             provider="pat",
-            origin_token="configured-origin",
-            upstream_token="",
+            fork_token="configured-fork",
+            pull_request_token="",
         )
         github_api_push.configure_credentials(
-            credentials, "/secure/config.toml", require_upstream=False
+            credentials, "/secure/config.toml", require_pull_request=False
         )
-        self.assertEqual(github_api_push.token(), "configured-origin")
-        with self.assertRaisesRegex(SystemExit, "upstream_token"):
+        self.assertEqual(github_api_push.fork_token(), "configured-fork")
+        with self.assertRaisesRegex(SystemExit, "pull_request_token"):
             github_api_push.configure_credentials(
-                credentials, "/secure/config.toml", require_upstream=True
+                credentials, "/secure/config.toml", require_pull_request=True
             )
 
     def test_existing_pr_title_is_updated_without_replacing_body(self) -> None:
@@ -50,7 +50,7 @@ class GitHubApiPushTests(unittest.TestCase):
             "body": "Human-maintained body",
         }
         with mock.patch.object(
-            github_api_push, "upstream_token", return_value="token"
+            github_api_push, "pull_request_token", return_value="token"
         ), mock.patch.object(github_api_push, "gh", side_effect=[[existing], {}]) as gh:
             github_api_push.ensure_pull_request(
                 source_repo=source,

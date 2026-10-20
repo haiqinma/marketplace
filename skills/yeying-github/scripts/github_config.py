@@ -28,9 +28,8 @@ VALID_MODES = {"api", "git"}
 VALID_VISIBILITIES = {"auto", "public", "private"}
 VALID_PROVIDERS = {"pat", "github_app"}
 SECRET_KEYS = {
-    "token",
-    "origin_token",
-    "upstream_token",
+    "fork_token",
+    "pull_request_token",
     "user_token",
     "refresh_token",
     "client_secret",
@@ -52,8 +51,8 @@ class GitHubAppSettings:
 @dataclass(frozen=True)
 class AuthProfile:
     provider: str
-    origin_token: str
-    upstream_token: str
+    fork_token: str
+    pull_request_token: str
     github_app: GitHubAppSettings
 
 
@@ -114,7 +113,8 @@ def _contains_secret(value: object) -> bool:
     if not isinstance(value, dict):
         return False
     for key, child in value.items():
-        if key in SECRET_KEYS and isinstance(child, str) and child.strip():
+        is_secret_key = key in SECRET_KEYS or key == "token" or key.endswith("_token")
+        if is_secret_key and isinstance(child, str) and child.strip():
             return True
         if _contains_secret(child):
             return True
@@ -154,14 +154,27 @@ def _table(section: dict[str, object], name: str) -> dict[str, object]:
     return value
 
 
+def _reject_unknown(
+    table: dict[str, object], allowed: set[str], table_name: str
+) -> None:
+    unknown = sorted(set(table) - allowed)
+    if unknown:
+        raise ConfigError(
+            f"Unsupported key(s) in [{table_name}]: {', '.join(unknown)}; "
+            f"allowed keys: {', '.join(sorted(allowed))}"
+        )
+
+
 def _profile(
     section: dict[str, object],
     visibility: str,
-    *,
-    legacy_origin_token: str = "",
-    legacy_upstream_token: str = "",
 ) -> AuthProfile:
     profile = _table(section, visibility)
+    _reject_unknown(
+        profile,
+        {"provider", "fork_token", "pull_request_token", "github_app"},
+        f"github.{visibility}",
+    )
     provider = str(profile.get("provider", "pat")).strip().lower()
     if provider not in VALID_PROVIDERS:
         raise ConfigError(
@@ -171,15 +184,15 @@ def _profile(
     app = profile.get("github_app", {})
     if not isinstance(app, dict):
         raise ConfigError(f"[github.{visibility}.github_app] must be a TOML table")
-    shared_token = str(profile.get("token", "")).strip()
+    _reject_unknown(
+        app,
+        {"client_id", "client_secret", "user_token", "refresh_token", "expires_at"},
+        f"github.{visibility}.github_app",
+    )
     return AuthProfile(
         provider=provider,
-        origin_token=str(
-            profile.get("origin_token", shared_token or legacy_origin_token)
-        ).strip(),
-        upstream_token=str(
-            profile.get("upstream_token", shared_token or legacy_upstream_token)
-        ).strip(),
+        fork_token=str(profile.get("fork_token", "")).strip(),
+        pull_request_token=str(profile.get("pull_request_token", "")).strip(),
         github_app=GitHubAppSettings(
             client_id=str(app.get("client_id", "")).strip(),
             user_token=str(app.get("user_token", "")).strip(),
@@ -198,6 +211,11 @@ def load(
     env_path = os.environ.get("YEYING_GITHUB_CONFIG")
     path = explicit or (Path(env_path).expanduser() if env_path else DEFAULT_CONFIG_PATH)
     section = _read_config(path, required=explicit is not None or bool(env_path))
+    _reject_unknown(
+        section,
+        {"mode", "visibility", "sync_script", "pr_script", "public", "private"},
+        "github",
+    )
 
     mode = (
         (mode_override or "").strip()
@@ -223,21 +241,12 @@ def load(
     if not sync_script or not pr_script:
         raise ConfigError("sync_script and pr_script must be non-empty paths")
 
-    # Legacy root tokens remain a public-only compatibility path. Private delivery
-    # never falls back to them, so the two visibility profiles cannot mix secrets.
-    legacy_origin = str(section.get("origin_token", "")).strip()
-    legacy_upstream = str(section.get("upstream_token", "")).strip()
     return Settings(
         mode=mode,
         visibility=visibility,
         sync_script=sync_script,
         pr_script=pr_script,
-        public=_profile(
-            section,
-            "public",
-            legacy_origin_token=legacy_origin,
-            legacy_upstream_token=legacy_upstream,
-        ),
+        public=_profile(section, "public"),
         private=_profile(section, "private"),
         config_path=path,
     )

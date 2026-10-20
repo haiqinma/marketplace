@@ -123,13 +123,13 @@ def validate_repository_pair(
     expected: str,
     origin_repo: str,
     upstream_repo: str,
-    upstream_token: str,
+    pull_request_token: str,
 ) -> str:
     origin_visibility = metadata_visibility(
-        origin_repo, github_repo_metadata(origin_repo, upstream_token)
+        origin_repo, github_repo_metadata(origin_repo, pull_request_token)
     )
     upstream_visibility = metadata_visibility(
-        upstream_repo, github_repo_metadata(upstream_repo, upstream_token)
+        upstream_repo, github_repo_metadata(upstream_repo, pull_request_token)
     )
     if origin_visibility != upstream_visibility:
         raise SystemExit(
@@ -150,18 +150,18 @@ def resolve_repository_access(
     origin_repo: str,
     upstream_repo: str,
 ) -> tuple[str, Credentials]:
-    require_origin = settings.mode == "api"
+    require_fork = settings.mode == "api"
     if settings.visibility in {"public", "private"}:
         credentials = credentials_for(
             settings,
             settings.visibility,
-            require_origin=require_origin,
+            require_fork=require_fork,
         )
         visibility = validate_repository_pair(
             settings.visibility,
             origin_repo,
             upstream_repo,
-            credentials.upstream_token,
+            credentials.pull_request_token,
         )
         return visibility, credentials
 
@@ -174,20 +174,20 @@ def resolve_repository_access(
             credentials = credentials_for(
                 settings,
                 "public",
-                require_origin=require_origin,
+                require_fork=require_fork,
             )
             validate_repository_pair(
-                "public", origin_repo, upstream_repo, credentials.upstream_token
+                "public", origin_repo, upstream_repo, credentials.pull_request_token
             )
             return "public", credentials
 
     credentials = credentials_for(
         settings,
         "private",
-        require_origin=require_origin,
+        require_fork=require_fork,
     )
     visibility = validate_repository_pair(
-        "private", origin_repo, upstream_repo, credentials.upstream_token
+        "private", origin_repo, upstream_repo, credentials.pull_request_token
     )
     return visibility, credentials
 
@@ -407,7 +407,7 @@ def deliver_git(
 
     body = read_body(args, title)
     origin_owner = origin_repo.split("/", 1)[0]
-    pr_env = subprocess_env(credentials.upstream_token)
+    pr_env = subprocess_env(credentials.pull_request_token)
     if pr_script.is_file():
         pr_env.update(
             {
