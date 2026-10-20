@@ -11,11 +11,7 @@ import shlex
 import shutil
 import subprocess
 import sys
-import urllib.error
-import urllib.parse
-import urllib.request
 from pathlib import Path
-from typing import Any
 
 from github_auth import Credentials, credentials_for
 from github_config import ConfigError, Settings, load
@@ -23,7 +19,6 @@ from github_config import ConfigError, Settings, load
 
 GENERIC_TITLES = {"change", "changes", "misc", "pull request", "sync", "update", "updates"}
 TOKEN_ENV_KEYS = ("GH_TOKEN", "GITHUB_TOKEN", "UPSTREAM_TOKEN")
-API_VERSION = "2022-11-28"
 
 
 def git_output(*args: str) -> str:
@@ -61,106 +56,6 @@ def parse_github_repo(remote_url: str) -> tuple[str, str]:
         if match:
             return match.group("owner"), match.group("repo")
     raise SystemExit(f"Unsupported GitHub remote URL: {remote_url}")
-
-
-def github_repo_metadata(
-    repo: str,
-    auth_token: str = "",
-    *,
-    allow_not_found: bool = False,
-) -> dict[str, Any] | None:
-    owner, name = repo.split("/", 1)
-    encoded_owner = urllib.parse.quote(owner, safe="")
-    encoded_name = urllib.parse.quote(name, safe="")
-    headers = {
-        "Accept": "application/vnd.github+json",
-        "X-GitHub-Api-Version": API_VERSION,
-        "User-Agent": "yeying-github",
-    }
-    if auth_token:
-        headers["Authorization"] = f"Bearer {auth_token}"
-    request = urllib.request.Request(
-        f"https://api.github.com/repos/{encoded_owner}/{encoded_name}",
-        headers=headers,
-    )
-    try:
-        with urllib.request.urlopen(request, timeout=30) as response:
-            payload = json.loads(response.read().decode("utf-8"))
-    except urllib.error.HTTPError as exc:
-        if exc.code == 404 and allow_not_found:
-            return None
-        if exc.code in {401, 403, 404}:
-            raise SystemExit(
-                f"Cannot read GitHub repository {repo} with the selected project "
-                f"credential (HTTP {exc.code}). The pull_request_token or GitHub App "
-                "user token must read both origin and upstream."
-            ) from exc
-        raise SystemExit(f"Cannot inspect GitHub repository {repo} (HTTP {exc.code}).") from exc
-    except (TimeoutError, urllib.error.URLError) as exc:
-        raise SystemExit(f"Cannot inspect GitHub repository {repo}: {exc}") from exc
-    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
-        raise SystemExit(f"GitHub returned invalid repository metadata for {repo}.") from exc
-    if not isinstance(payload, dict):
-        raise SystemExit(f"GitHub returned invalid repository metadata for {repo}.")
-    return payload
-
-
-def metadata_visibility(repo: str, metadata: dict[str, Any] | None) -> str:
-    if metadata is None:
-        raise SystemExit(f"GitHub repository is not publicly visible: {repo}")
-    visibility = metadata.get("visibility")
-    if visibility is None and isinstance(metadata.get("private"), bool):
-        visibility = "private" if metadata["private"] else "public"
-    if visibility not in {"public", "private"}:
-        raise SystemExit(
-            f"GitHub repository {repo} has unsupported visibility {visibility!r}; "
-            "yeying-github currently supports public and private fork workflows."
-        )
-    return str(visibility)
-
-
-def validate_repository_pair(
-    expected: str,
-    origin_repo: str,
-    upstream_repo: str,
-    pull_request_token: str,
-) -> str:
-    origin_visibility = metadata_visibility(
-        origin_repo, github_repo_metadata(origin_repo, pull_request_token)
-    )
-    upstream_visibility = metadata_visibility(
-        upstream_repo, github_repo_metadata(upstream_repo, pull_request_token)
-    )
-    if origin_visibility != upstream_visibility:
-        raise SystemExit(
-            "origin and upstream have different GitHub visibility "
-            f"({origin_repo}: {origin_visibility}, {upstream_repo}: {upstream_visibility}). "
-            "The supported workflow requires repositories in the same GitHub fork network."
-        )
-    if expected != "auto" and expected != origin_visibility:
-        raise SystemExit(
-            f"Configured visibility is {expected}, but both GitHub repositories are "
-            f"{origin_visibility}. Set visibility = \"{origin_visibility}\" or \"auto\"."
-        )
-    return origin_visibility
-
-
-def resolve_repository_access(
-    settings: Settings,
-    origin_repo: str,
-    upstream_repo: str,
-) -> tuple[str, Credentials]:
-    require_fork = settings.mode == "api"
-    credentials = credentials_for(
-        settings,
-        require_fork=require_fork,
-    )
-    if settings.visibility in {"public", "private"}:
-        return settings.visibility, credentials
-    visibility = validate_repository_pair(
-        "auto", origin_repo, upstream_repo, credentials.pull_request_token
-    )
-    return visibility, credentials
 
 
 def validate_title(title: str) -> str:
@@ -402,11 +297,6 @@ def parse_args() -> argparse.Namespace:
         choices=("api", "git"),
         help="Transport: GitHub API, or repository Git/gh scripts.",
     )
-    parser.add_argument(
-        "--visibility",
-        choices=("auto", "public", "private"),
-        help="Detect visibility with the selected credential, or use an explicit configured value.",
-    )
     parser.add_argument("--title", required=True, help="Specific title for the complete upstream PR delta.")
     body_group = parser.add_mutually_exclusive_group()
     body_group.add_argument("--body")
@@ -422,18 +312,16 @@ def main() -> int:
     title = validate_title(args.title)
     root, origin_repo, upstream_repo = ensure_fork_main()
     try:
-        settings = load(args.config, args.mode, args.visibility).resolve(
-            origin_repo, upstream_repo
-        )
+        settings = load(args.config, args.mode).resolve(origin_repo, upstream_repo)
     except ConfigError as exc:
         raise SystemExit(str(exc)) from exc
     if args.skip_sync and settings.mode != "git":
         raise SystemExit("--skip-sync is available only in git mode.")
-    visibility, credentials = resolve_repository_access(
-        settings, origin_repo, upstream_repo
+    credentials = credentials_for(
+        settings,
+        require_fork=settings.mode == "api",
     )
     print(f"mode: {settings.mode}")
-    print(f"visibility: {visibility}")
     print(f"configuration: {settings.project}")
     print(f"authentication: {credentials.provider}")
     print(f"head: {origin_repo}:main")

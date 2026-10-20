@@ -2,7 +2,7 @@
 
 ## 设计原则
 
-凭证按账号默认值或具体仓库对组织，不按 public/private 组织。公共或私有只是 GitHub 仓库元数据，不应决定从哪个凭证 profile 取值。
+凭证按账号默认值或具体仓库对组织，不按 public/private 组织。仓库可见性不改变凭证选择和交付算法，因此不需要配置或预先探测。
 
 配置只有两层：
 
@@ -14,7 +14,6 @@
 ```toml
 [github]
 mode = "api"
-visibility = "auto"
 sync_script = "scripts/sync.sh"
 pr_script = "scripts/pr.sh"
 fork_token = ""
@@ -25,7 +24,6 @@ pull_request_token = ""
 
 ```text
 mode
-visibility
 sync_script
 pr_script
 fork_token
@@ -42,7 +40,6 @@ projects
 [github.projects.marketplace]
 origin = "liuppx/marketplace"
 upstream = "yeying-community/marketplace"
-visibility = "public"
 ```
 
 项目名称只允许字母、数字、`_` 和 `-`。每个项目必须配置：
@@ -64,7 +61,6 @@ upstream = "owner/repository"
 
 ```text
 mode
-visibility
 sync_script
 pr_script
 fork_token
@@ -123,7 +119,6 @@ client_id = "Iv1.xxxxxxxxxxxxxxxx"
 [github.projects.private_repo]
 origin = "me/private-repo"
 upstream = "org/private-repo"
-visibility = "private"
 
 [github.projects.private_repo.github_app]
 client_id = "Iv1.xxxxxxxxxxxxxxxx"
@@ -138,34 +133,22 @@ python3 scripts/github_app_login.py --project private_repo
 
 登录和刷新会把 `user_token`、`refresh_token`、`expires_at` 原子写回实际提供认证的 App 表。如果项目继承全局 App，使用 `--project <name>` 最终仍会更新 `[github.github_app]`。
 
-## 可见性
+## 仓库访问与 API 配额
 
-### 自动探测
+Skill 不发送专门用于判断 public/private 的元数据请求。实际操作直接验证访问权限：
 
-`visibility = "auto"` 时：
+1. API 发布使用 `fork_token` 读取并更新个人 fork。
+2. PR 查询、创建和更新使用 `pull_request_token` 访问 upstream。
+3. GitHub App user token 同时承担两个职责。
 
-1. 先解析项目配置和认证。
-2. 使用最终的 `pull_request_token` 或 GitHub App user token 请求 origin 元数据。
-3. 使用同一凭证请求 upstream 元数据。
-4. 读取 `visibility`，旧响应以 `private` 布尔字段回退。
-5. 两端可见性不同则停止。
-
-每次执行固定增加两次已认证 REST API 请求。Token 本身不会被消耗，但请求计入 GitHub API rate limit。普通用户 Token 通常是每小时 5000 次；实际额度以 GitHub 响应和账号策略为准。
-
-不再先匿名请求。匿名请求常见额度是每出口 IP 每小时 60 次，HTTP 403 既可能是额度耗尽，也可能是策略限制，不能可靠推断仓库为私有。
-
-### 显式配置
-
-`visibility = "public"` 或 `"private"` 时，Skill 信任配置并跳过上述两次专门的元数据请求。
-
-显式配置不改变凭证选择，也不会跳过 API 发布和 PR 管理所需的正常请求。建议把显式可见性放在对应项目表中，而不是作为所有项目的全局断言。
+Token 本身不会被消耗，但实际 API 请求计入 GitHub rate limit。普通用户 Token 通常是每小时 5000 次；实际额度以 GitHub 响应和账号策略为准。
 
 ## PAT 职责
 
 | 字段 | API 模式 | Git 模式 |
 | --- | --- | --- |
 | `fork_token` | 上传本地已提交对象并更新个人 `origin/main` | 不使用，Git 使用 SSH 或 HTTPS credential helper |
-| `pull_request_token` | 自动探测可见性，并读取元数据、查询、创建或更新 upstream PR | 临时映射为 `GH_TOKEN` 传给 `pr.sh`/`gh` |
+| `pull_request_token` | 读取所需仓库和 PR 数据，并查询、创建或更新 upstream PR | 临时映射为 `GH_TOKEN` 传给 `pr.sh`/`gh` |
 
 API 模式要求两个字段。Git 模式允许 `fork_token` 为空，但要求 `pull_request_token`。
 
@@ -195,7 +178,7 @@ Fine-grained PAT：
 
 - `fork_token`：个人 fork 的 Metadata read、Contents read/write。
 - `pull_request_token`：社区 upstream 的 Metadata read、Pull requests read/write。
-- 自动探测或私有交付时，PR 凭证必须读取 origin 和 upstream。
+- 私有交付时，PR 凭证必须具备创建跨仓库 PR 所需的访问权限。
 - Fine-grained PAT 绑定一个 resource owner，跨 owner 私有 fork 可能无法由一个 Token 覆盖。
 
 ## GitHub App 边界

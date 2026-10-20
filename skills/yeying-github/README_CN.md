@@ -19,7 +19,7 @@
 1. `[github]` 保存所有仓库共用的默认配置。
 2. `[github.projects.<name>]` 是可选的，只在当前仓库的 origin 和 upstream 都匹配时生效。
 
-不再按公共仓库和私有仓库拆分凭证 profile。仓库可见性是仓库元数据，凭证属于默认账号配置或某个具体项目。
+不再按公共仓库和私有仓库拆分凭证 profile，也不再配置 `visibility`。凭证属于默认账号配置或某个具体项目，实际 GitHub 操作会直接验证这些凭证是否具备所需访问权限。
 
 ### 最小默认配置
 
@@ -28,7 +28,6 @@
 ```toml
 [github]
 mode = "api"                  # api | git
-visibility = "auto"           # auto | public | private
 sync_script = "scripts/sync.sh"
 pr_script = "scripts/pr.sh"
 fork_token = "<发布个人 origin/main 的 PAT>"
@@ -50,7 +49,6 @@ pull_request_token = "<读取仓库并管理 upstream PR 的 PAT>"
 [github.projects.marketplace]
 origin = "liuppx/marketplace"
 upstream = "yeying-community/marketplace"
-visibility = "public"
 ```
 
 `marketplace` 是本地配置名称，可以包含字母、数字、`_` 和 `-`。
@@ -64,7 +62,7 @@ upstream -> yeying-community/marketplace
 
 如果只有一端匹配，交付会直接停止并报告配置错误，不会静默回退到默认凭证。这样可以避免复制配置或拼写错误导致凭证用错项目。
 
-上面的例子继承默认传输模式、脚本和凭证，但明确指定仓库是公共的，因此不需要额外执行可见性探测。
+上面的例子继承默认传输模式、脚本和凭证。
 
 ### 项目独立凭证
 
@@ -75,7 +73,6 @@ upstream -> yeying-community/marketplace
 origin = "liuppx/internal-service"
 upstream = "example-org/internal-service"
 mode = "api"
-visibility = "private"
 fork_token = "<写入个人私有 fork 的 PAT>"
 pull_request_token = "<读取两端私有仓库并创建 PR 的 PAT>"
 ```
@@ -89,52 +86,26 @@ pull_request_token = "<读取两端私有仓库并创建 PR 的 PAT>"
 
 这条规则可以让凭证归属和权限错误保持明确。
 
-### 可见性探测与 Token 消耗
+### 仓库访问与 Token 消耗
 
-默认配置：
+Skill 不再专门探测仓库是公开还是私有。可见性既不影响凭证选择，也不改变交付算法，继续探测只会增加配置和 API 请求。
 
-```toml
-[github]
-visibility = "auto"
-```
+访问权限由真正需要它的操作直接验证：
 
-Skill 会先选择匹配的项目配置；没有匹配时使用全局默认配置。然后解析该配置中的 PAT 或 GitHub App 凭证，并发送：
+- `fork_token` 在 API 模式中访问并更新个人 `origin/main`。
+- `pull_request_token` 读取 upstream PR 数据并创建或更新 PR。
+- GitHub App user token 同时承担两个职责。
 
-```text
-GET /repos/<origin-owner>/<origin-repository>
-GET /repos/<upstream-owner>/<upstream-repository>
-```
+私有仓库自然要求凭证能够读取相关仓库；公共仓库通常可以使用更小的权限，但运行时不需要单独分支。
 
-两次请求都会使用已选中的 `pull_request_token`，或者 GitHub App user token。代码优先读取响应中的 `visibility` 字段，并以 `private` 布尔字段作为兼容回退。origin 和 upstream 必须返回相同的可见性。
-
-每次交付会因此消耗两次已认证 REST API 请求额度。Token 不会像一次性凭证一样被“消耗”或缩短寿命；消耗的是 GitHub API rate limit。普通已认证用户请求通常为每小时 5000 次，但 GitHub 账号、组织、企业和 App 策略可能改变实际额度。
-
-Skill 不再执行匿名探测。GitHub 匿名 API 通常按出口 IP 共享每小时 60 次额度；匿名额度耗尽可能返回 HTTP 403。旧设计会把这个 403 当成“可能是私有仓库”，这正是公共 Marketplace 仓库此前被误判并切换到 private profile 的原因。
-
-如果希望跳过这两次专门的元数据请求，可以明确配置可见性，推荐放在具体项目中：
-
-```toml
-[github.projects.marketplace]
-origin = "liuppx/marketplace"
-upstream = "yeying-community/marketplace"
-visibility = "public"
-```
-
-```toml
-[github.projects.internal_service]
-origin = "liuppx/internal-service"
-upstream = "example-org/internal-service"
-visibility = "private"
-```
-
-显式可见性会被当作可信配置，不再额外探测。但 API 发布和 PR 操作仍然会发送正常的 GitHub API 请求，所以这不会让 API 模式变成“无需 Token”。
+Token 不会因为调用而被“消耗”或缩短寿命。GitHub API 操作会计入 Token 的 rate-limit 配额。普通已认证用户请求通常为每小时 5000 次，但账号、组织、企业和 App 策略可能改变实际额度。
 
 ### 两个 Token 字段的职责
 
 | 字段 | API 模式 | Git 模式 | 权限要求 |
 | --- | --- | --- | --- |
 | `fork_token` | 发布本地已经存在的 commit/tree/blob，并更新个人 `origin/main` | 不使用 | 个人 fork 的 Metadata read、Contents read/write |
-| `pull_request_token` | `auto` 时探测可见性；读取元数据并查询、创建或更新 upstream PR | 临时传给 `pr.sh`/`gh` | upstream 的 Metadata read、Pull requests read/write；私有交付时必须读取两端仓库 |
+| `pull_request_token` | 读取所需仓库和 PR 数据，并查询、创建或更新 upstream PR | 临时传给 `pr.sh`/`gh` | upstream 的 Metadata read、Pull requests read/write；私有交付时必须读取两端仓库 |
 
 `git commit` 始终是本地操作，不需要 GitHub Token。`fork_token` 只发布已经提交的对象。
 
@@ -206,7 +177,6 @@ python3 scripts/github_app_login.py --project default
 [github.projects.internal_service]
 origin = "liuppx/internal-service"
 upstream = "example-org/internal-service"
-visibility = "private"
 
 [github.projects.internal_service.github_app]
 client_id = "Iv1.xxxxxxxxxxxxxxxx"
@@ -244,13 +214,13 @@ mode = "git"
 2. `YEYING_GITHUB_CONFIG`
 3. `~/.yeying/skills/github/config.toml`
 
-传输模式和可见性：
+传输模式：
 
-1. `--mode` / `--visibility`
-2. `YEYING_GITHUB_MODE` / `YEYING_GITHUB_VISIBILITY`
+1. `--mode`
+2. `YEYING_GITHUB_MODE`
 3. 匹配的 `[github.projects.<name>]`
 4. `[github]`
-5. 默认值：`api` 和 `auto`
+5. 默认值：`api`
 
 认证：
 

@@ -16,7 +16,6 @@ def settings(auth: AuthProfile, *, project: str = "default") -> Settings:
     table = "github" if project == "default" else f"github.projects.{project}"
     return Settings(
         mode="api",
-        visibility="auto",
         sync_script="scripts/sync.sh",
         pr_script="scripts/pr.sh",
         auth=auth,

@@ -19,7 +19,7 @@ The configuration has two layers:
 1. `[github]` contains defaults used by every repository.
 2. `[github.projects.<name>]` is optional and applies only when both configured remotes match the current repository.
 
-There are no separate public and private credential profiles. Repository visibility is metadata, while credentials belong to the default account configuration or a specific project.
+There are no separate public and private credential profiles and no `visibility` setting. Credentials belong to the default account configuration or a specific project; actual GitHub operations determine whether those credentials have the required access.
 
 ### Minimal Default Configuration
 
@@ -28,7 +28,6 @@ This configuration applies to every repository that has no matching project over
 ```toml
 [github]
 mode = "api"                  # api | git
-visibility = "auto"           # auto | public | private
 sync_script = "scripts/sync.sh"
 pr_script = "scripts/pr.sh"
 fork_token = "<PAT that publishes personal origin/main>"
@@ -50,7 +49,6 @@ Add a project entry only when a repository pair needs settings different from th
 [github.projects.marketplace]
 origin = "liuppx/marketplace"
 upstream = "yeying-community/marketplace"
-visibility = "public"
 ```
 
 The project name, such as `marketplace`, is a local identifier. It may contain letters, digits, `_`, and `-`.
@@ -64,7 +62,7 @@ upstream -> yeying-community/marketplace
 
 If only one side matches, delivery stops with a configuration error. This prevents a typo or copied configuration from silently falling back to global credentials.
 
-The example above inherits global transport, scripts, and credentials, but uses configured public visibility so no dedicated visibility probe is needed.
+The example above inherits global transport, scripts, and credentials.
 
 ### Independent Project Credentials
 
@@ -75,7 +73,6 @@ A project can replace the global authentication completely:
 origin = "liuppx/internal-service"
 upstream = "example-org/internal-service"
 mode = "api"
-visibility = "private"
 fork_token = "<PAT that writes the private personal fork>"
 pull_request_token = "<PAT that reads both repositories and creates the PR>"
 ```
@@ -89,52 +86,26 @@ Authentication is inherited as a unit:
 
 This rule makes credential ownership and permission failures predictable.
 
-### Visibility Detection And Token Usage
+### Repository Access And Token Usage
 
-With the default setting:
+The Skill does not perform a dedicated public/private visibility probe. Visibility does not affect credential selection or the delivery algorithm, so probing it would add configuration and API requests without changing behavior.
 
-```toml
-[github]
-visibility = "auto"
-```
+Access is checked by the operation that needs it:
 
-The Skill first selects the matching project configuration or the global default, resolves its PAT or GitHub App credential, and then sends:
+- `fork_token` accesses and updates personal `origin/main` in API mode.
+- `pull_request_token` reads upstream PR data and creates or updates the pull request.
+- A GitHub App user token performs both roles.
 
-```text
-GET /repos/<origin-owner>/<origin-repository>
-GET /repos/<upstream-owner>/<upstream-repository>
-```
+Private repositories naturally require credentials that can read the affected repositories. Public repositories may need narrower scopes, but no separate runtime branch is required.
 
-Both requests use the selected `pull_request_token`, or the GitHub App user token. The response's `visibility` field, with `private` as a compatibility fallback, determines whether the repositories are public or private. Both repositories must report the same visibility.
-
-This costs two authenticated REST API requests per delivery invocation. A Token is not consumed or shortened by use; the requests count against GitHub's API rate limit. Authenticated user requests commonly have a 5,000-request-per-hour limit, though GitHub account, organization, enterprise, and App policies can change the effective limit.
-
-The Skill no longer probes anonymously. Anonymous GitHub API requests commonly share a 60-request-per-hour IP-based quota, and an exhausted anonymous quota can return HTTP 403. Treating that response as evidence of a private repository caused false private detection in the previous design.
-
-To skip the two dedicated metadata requests, configure visibility explicitly, preferably in the project entry:
-
-```toml
-[github.projects.marketplace]
-origin = "liuppx/marketplace"
-upstream = "yeying-community/marketplace"
-visibility = "public"
-```
-
-```toml
-[github.projects.internal_service]
-origin = "liuppx/internal-service"
-upstream = "example-org/internal-service"
-visibility = "private"
-```
-
-Explicit visibility is trusted configuration. API publishing and pull-request operations still make their normal authenticated GitHub API requests, so it does not make API mode token-free.
+A Token is not consumed or shortened by use. GitHub API operations count against the token's rate-limit quota. Authenticated user requests commonly have a 5,000-request-per-hour limit, though account, organization, enterprise, and App policies can change the effective limit.
 
 ### Token Responsibilities
 
 | Field | API mode | Git mode | Required permissions |
 | --- | --- | --- | --- |
 | `fork_token` | Publishes existing local commit/tree/blob objects and updates personal `origin/main` | Unused | Metadata read and Contents read/write on the personal fork |
-| `pull_request_token` | Detects visibility when set to `auto`; reads metadata and lists, creates, or updates the upstream PR | Passed temporarily to `pr.sh`/`gh` | Metadata read and Pull requests read/write on upstream; private delivery must read both repositories |
+| `pull_request_token` | Reads required repository and PR data and lists, creates, or updates the upstream PR | Passed temporarily to `pr.sh`/`gh` | Metadata read and Pull requests read/write on upstream; private delivery must read both repositories |
 
 `git commit` is local and never requires a GitHub Token. `fork_token` publishes objects that have already been committed.
 
@@ -206,7 +177,6 @@ Project-specific GitHub App configuration:
 [github.projects.internal_service]
 origin = "liuppx/internal-service"
 upstream = "example-org/internal-service"
-visibility = "private"
 
 [github.projects.internal_service.github_app]
 client_id = "Iv1.xxxxxxxxxxxxxxxx"
@@ -244,13 +214,13 @@ Configuration file:
 2. `YEYING_GITHUB_CONFIG`
 3. `~/.yeying/skills/github/config.toml`
 
-Transport and visibility:
+Transport:
 
-1. `--mode` / `--visibility`
-2. `YEYING_GITHUB_MODE` / `YEYING_GITHUB_VISIBILITY`
+1. `--mode`
+2. `YEYING_GITHUB_MODE`
 3. Matching `[github.projects.<name>]`
 4. `[github]`
-5. Defaults: `api` and `auto`
+5. Default: `api`
 
 Authentication:
 

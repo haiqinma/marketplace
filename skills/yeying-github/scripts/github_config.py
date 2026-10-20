@@ -25,7 +25,6 @@ except ModuleNotFoundError:  # Python 3.10 and earlier
 
 DEFAULT_CONFIG_PATH = Path.home() / ".yeying" / "skills" / "github" / "config.toml"
 VALID_MODES = {"api", "git"}
-VALID_VISIBILITIES = {"auto", "public", "private"}
 AUTH_KEYS = {"fork_token", "pull_request_token", "github_app"}
 SECRET_KEYS = {
     "fork_token",
@@ -64,7 +63,6 @@ class ProjectOverride:
     origin: str
     upstream: str
     mode: str
-    visibility: str
     sync_script: str
     pr_script: str
     auth: AuthProfile | None
@@ -74,7 +72,6 @@ class ProjectOverride:
 @dataclass(frozen=True)
 class Settings:
     mode: str
-    visibility: str
     sync_script: str
     pr_script: str
     auth: AuthProfile
@@ -86,23 +83,16 @@ class Settings:
 @dataclass(frozen=True)
 class Config:
     mode: str
-    visibility: str
     sync_script: str
     pr_script: str
     auth: AuthProfile
     projects: tuple[ProjectOverride, ...]
     config_path: Path
     mode_override: str
-    visibility_override: str
 
     def _settings(self, project: ProjectOverride | None) -> Settings:
         return Settings(
             mode=self.mode_override or (project.mode if project else "") or self.mode,
-            visibility=(
-                self.visibility_override
-                or (project.visibility if project else "")
-                or self.visibility
-            ),
             sync_script=(project.sync_script if project else "") or self.sync_script,
             pr_script=(project.pr_script if project else "") or self.pr_script,
             auth=(project.auth if project and project.auth is not None else self.auth),
@@ -310,7 +300,6 @@ def _projects(section: dict[str, object]) -> tuple[ProjectOverride, ...]:
                 "origin",
                 "upstream",
                 "mode",
-                "visibility",
                 "sync_script",
                 "pr_script",
                 *AUTH_KEYS,
@@ -329,12 +318,6 @@ def _projects(section: dict[str, object]) -> tuple[ProjectOverride, ...]:
         mode = _validated_choice(
             raw_project.get("mode", ""), VALID_MODES, f"{table_name}.mode", empty=True
         )
-        visibility = _validated_choice(
-            raw_project.get("visibility", ""),
-            VALID_VISIBILITIES,
-            f"{table_name}.visibility",
-            empty=True,
-        )
         auth = (
             _auth_profile(raw_project, table_name)
             if AUTH_KEYS.intersection(raw_project)
@@ -346,7 +329,6 @@ def _projects(section: dict[str, object]) -> tuple[ProjectOverride, ...]:
                 origin=origin,
                 upstream=upstream,
                 mode=mode,
-                visibility=visibility,
                 sync_script=str(raw_project.get("sync_script", "")).strip(),
                 pr_script=str(raw_project.get("pr_script", "")).strip(),
                 auth=auth,
@@ -359,7 +341,6 @@ def _projects(section: dict[str, object]) -> tuple[ProjectOverride, ...]:
 def load(
     explicit_path: str | Path | None = None,
     mode_override: str | None = None,
-    visibility_override: str | None = None,
 ) -> Config:
     explicit = Path(explicit_path).expanduser() if explicit_path else None
     env_path = os.environ.get("YEYING_GITHUB_CONFIG")
@@ -369,7 +350,6 @@ def load(
         section,
         {
             "mode",
-            "visibility",
             "sync_script",
             "pr_script",
             "projects",
@@ -379,20 +359,10 @@ def load(
     )
 
     mode = _validated_choice(section.get("mode", "api"), VALID_MODES, "github.mode")
-    visibility = _validated_choice(
-        section.get("visibility", "auto"), VALID_VISIBILITIES, "github.visibility"
-    )
     forced_mode = _validated_choice(
         (mode_override or "").strip() or os.environ.get("YEYING_GITHUB_MODE", "").strip(),
         VALID_MODES,
         "GitHub mode override",
-        empty=True,
-    )
-    forced_visibility = _validated_choice(
-        (visibility_override or "").strip()
-        or os.environ.get("YEYING_GITHUB_VISIBILITY", "").strip(),
-        VALID_VISIBILITIES,
-        "GitHub visibility override",
         empty=True,
     )
     sync_script = str(section.get("sync_script", "scripts/sync.sh")).strip()
@@ -402,14 +372,12 @@ def load(
 
     return Config(
         mode=mode,
-        visibility=visibility,
         sync_script=sync_script,
         pr_script=pr_script,
         auth=_auth_profile(section, "github"),
         projects=_projects(section),
         config_path=path,
         mode_override=forced_mode,
-        visibility_override=forced_visibility,
     )
 
 

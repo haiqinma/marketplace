@@ -15,9 +15,9 @@ Development happens directly on the contributor fork's `main` branch. Do not cre
 
 ## Configuration Model
 
-Read [references/configuration.md](references/configuration.md) when selecting transport, visibility, credentials, or a project override.
+Read [references/configuration.md](references/configuration.md) when selecting transport, credentials, or a project override.
 
-Use `[github]` as the default configuration for every repository. Add `[github.projects.<name>]` only when an exact `origin` plus `upstream` pair needs different transport, visibility, scripts, or credentials.
+Use `[github]` as the default configuration for every repository. Add `[github.projects.<name>]` only when an exact `origin` plus `upstream` pair needs different transport, scripts, or credentials.
 
 - Match project overrides by both `origin = "owner/repository"` and `upstream = "owner/repository"`, case-insensitively.
 - Reject partial matches instead of silently using defaults.
@@ -28,14 +28,11 @@ Use `[github]` as the default configuration for every repository. Add `[github.p
 
 Infer authentication from the selected default or project configuration. Non-empty `fork_token` or `pull_request_token` selects PAT authentication; a `github_app` subtable selects GitHub App authentication. Reject configurations containing both non-empty PAT credentials and a GitHub App table. Reject shared `token`, `provider`, `origin_token`, and `upstream_token` fields.
 
-## Visibility And API Quota
+## Repository Access And API Quota
 
-Visibility no longer selects credentials.
+Do not configure or probe repository visibility. It does not select credentials or change the delivery algorithm. Let the actual GitHub operations verify repository access with the credential responsible for that operation.
 
-- `visibility = "auto"`: resolve the default or project credential first, then make two authenticated repository metadata requests, one for origin and one for upstream. This avoids anonymous rate-limit ambiguity and detects the actual `public` or `private` value.
-- `visibility = "public"` or `"private"`: trust the configured value and skip the two dedicated metadata requests. API publication and PR operations still make their normal authenticated GitHub API requests.
-
-GitHub tokens are not consumed like one-time secrets. Requests consume rate-limit quota. Authenticated REST requests commonly use a 5,000-request-per-hour user quota; exact limits depend on GitHub account and App policy. Never interpret an anonymous HTTP 403 as evidence that a repository is private.
+GitHub tokens are not consumed like one-time secrets. API publication and PR operations consume rate-limit quota. Authenticated REST requests commonly use a 5,000-request-per-hour user quota; exact limits depend on GitHub account and App policy.
 
 ## Transport
 
@@ -47,7 +44,7 @@ The default is `api`. Override it with `--mode`, `YEYING_GITHUB_MODE`, a matched
 ## Credentials
 
 - `fork_token` publishes already committed objects and updates personal `origin/main` in API mode. Git mode does not use it because Git transport authenticates through SSH or an HTTPS credential helper.
-- `pull_request_token` reads repository metadata when visibility is automatic and lists, creates, or updates the community PR.
+- `pull_request_token` reads required repository and PR data and lists, creates, or updates the community PR.
 - When one classic PAT covers both roles, place the same value in both explicit fields.
 - For a public cross-owner fork, prefer a classic PAT with only `public_repo`.
 - For a private cross-owner fork PR, prefer a controlled classic PAT with `repo` or a GitHub App user-to-server token that can access both repositories.

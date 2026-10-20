@@ -30,7 +30,6 @@ class GitHubConfigTests(unittest.TestCase):
         ):
             settings = load().resolve("liuppx/repo", "yeying-community/repo")
         self.assertEqual(settings.mode, "api")
-        self.assertEqual(settings.visibility, "auto")
         self.assertEqual(settings.sync_script, "scripts/sync.sh")
         self.assertEqual(settings.pr_script, "scripts/pr.sh")
         self.assertEqual(settings.project, "default")
@@ -41,32 +40,31 @@ class GitHubConfigTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             config = self.write_config(
                 directory,
-                '[github]\nmode = "api"\nvisibility = "auto"\n'
+                '[github]\nmode = "api"\n'
                 '[github.projects.marketplace]\n'
                 'origin = "liuppx/marketplace"\n'
                 'upstream = "yeying-community/marketplace"\n'
-                'mode = "git"\nvisibility = "public"\n',
+                'mode = "git"\n',
             )
             loaded = load(config, mode_override="api")
             settings = loaded.resolve(
                 "liuppx/marketplace", "yeying-community/marketplace"
             )
         self.assertEqual(settings.mode, "api")
-        self.assertEqual(settings.visibility, "public")
         self.assertEqual(settings.project, "marketplace")
 
-    def test_environment_override_has_precedence_over_project(self) -> None:
+    def test_environment_mode_override_has_precedence_over_project(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             config = self.write_config(
                 directory,
                 '[github.projects.repo]\norigin = "me/repo"\nupstream = "org/repo"\n'
-                'visibility = "private"\n',
+                'mode = "git"\n',
             )
             with mock.patch.dict(
-                os.environ, {"YEYING_GITHUB_VISIBILITY": "public"}, clear=True
+                os.environ, {"YEYING_GITHUB_MODE": "api"}, clear=True
             ):
                 settings = load(config).resolve("me/repo", "org/repo")
-        self.assertEqual(settings.visibility, "public")
+        self.assertEqual(settings.mode, "api")
 
     def test_default_pat_is_used_when_no_project_matches(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -96,8 +94,7 @@ class GitHubConfigTests(unittest.TestCase):
                 'pull_request_token = "default-pr"\n'
                 '[github.projects.marketplace]\n'
                 'origin = "liuppx/marketplace"\n'
-                'upstream = "yeying-community/marketplace"\n'
-                'visibility = "public"\n',
+                'upstream = "yeying-community/marketplace"\n',
                 secure=True,
             )
             settings = load(config).resolve(
@@ -127,7 +124,7 @@ class GitHubConfigTests(unittest.TestCase):
             config = self.write_config(
                 directory,
                 '[github.projects.repo]\norigin = "Liuppx/Repo"\n'
-                'upstream = "YeYing-Community/Repo"\nvisibility = "public"\n',
+                'upstream = "YeYing-Community/Repo"\n',
             )
             settings = load(config).resolve("liuppx/repo", "yeying-community/repo")
         self.assertEqual(settings.project, "repo")
@@ -180,7 +177,7 @@ class GitHubConfigTests(unittest.TestCase):
             with self.assertRaisesRegex(ConfigError, "Unknown GitHub project"):
                 load(config).resolve_project("missing")
 
-    def test_rejects_old_visibility_profiles(self) -> None:
+    def test_rejects_old_credential_profiles(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             config = self.write_config(
                 directory,
