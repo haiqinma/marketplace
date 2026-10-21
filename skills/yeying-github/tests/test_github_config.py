@@ -22,13 +22,13 @@ class GitHubConfigTests(unittest.TestCase):
             config.chmod(0o600)
         return config
 
-    def test_defaults_resolve_for_any_repository_pair(self) -> None:
+    def test_defaults_resolve_for_any_upstream_repository(self) -> None:
         with tempfile.TemporaryDirectory() as home, mock.patch.dict(
             os.environ, {}, clear=True
         ), mock.patch.object(
             github_config, "DEFAULT_CONFIG_PATH", Path(home) / ".yeying/skills/github/config.toml"
         ):
-            settings = load().resolve("liuppx/repo", "yeying-community/repo")
+            settings = load().resolve("yeying-community/repo")
         self.assertEqual(settings.mode, "api")
         self.assertEqual(settings.sync_script, "scripts/sync.sh")
         self.assertEqual(settings.pr_script, "scripts/pr.sh")
@@ -42,14 +42,10 @@ class GitHubConfigTests(unittest.TestCase):
                 directory,
                 '[github]\nmode = "api"\n'
                 '[github.projects.marketplace]\n'
-                'origin = "liuppx/marketplace"\n'
-                'upstream = "yeying-community/marketplace"\n'
                 'mode = "git"\n',
             )
             loaded = load(config, mode_override="api")
-            settings = loaded.resolve(
-                "liuppx/marketplace", "yeying-community/marketplace"
-            )
+            settings = loaded.resolve("yeying-community/marketplace")
         self.assertEqual(settings.mode, "api")
         self.assertEqual(settings.project, "marketplace")
 
@@ -57,13 +53,12 @@ class GitHubConfigTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             config = self.write_config(
                 directory,
-                '[github.projects.repo]\norigin = "me/repo"\nupstream = "org/repo"\n'
-                'mode = "git"\n',
+                '[github.projects.repo]\nmode = "git"\n',
             )
             with mock.patch.dict(
                 os.environ, {"YEYING_GITHUB_MODE": "api"}, clear=True
             ):
-                settings = load(config).resolve("me/repo", "org/repo")
+                settings = load(config).resolve("org/repo")
         self.assertEqual(settings.mode, "api")
 
     def test_default_pat_is_used_when_no_project_matches(self) -> None:
@@ -72,8 +67,7 @@ class GitHubConfigTests(unittest.TestCase):
                 directory,
                 '[github]\nfork_token = "default-fork"\n'
                 'pull_request_token = "default-pr"\n'
-                '[github.projects.special]\norigin = "me/special"\n'
-                'upstream = "org/special"\n',
+                '[github.projects.special]\nmode = "git"\n',
                 secure=True,
             )
             with mock.patch.dict(
@@ -81,7 +75,7 @@ class GitHubConfigTests(unittest.TestCase):
                 {"GH_TOKEN": "ambient", "GITHUB_TOKEN": "ambient"},
                 clear=True,
             ):
-                settings = load(config).resolve("me/ordinary", "org/ordinary")
+                settings = load(config).resolve("org/ordinary")
         self.assertEqual(settings.auth.fork_token, "default-fork")
         self.assertEqual(settings.auth.pull_request_token, "default-pr")
         self.assertEqual(settings.project, "default")
@@ -92,14 +86,10 @@ class GitHubConfigTests(unittest.TestCase):
                 directory,
                 '[github]\nfork_token = "default-fork"\n'
                 'pull_request_token = "default-pr"\n'
-                '[github.projects.marketplace]\n'
-                'origin = "liuppx/marketplace"\n'
-                'upstream = "yeying-community/marketplace"\n',
+                '[github.projects.marketplace]\n',
                 secure=True,
             )
-            settings = load(config).resolve(
-                "liuppx/marketplace", "yeying-community/marketplace"
-            )
+            settings = load(config).resolve("yeying-community/marketplace")
         self.assertEqual(settings.project, "marketplace")
         self.assertEqual(settings.auth_table, "github")
         self.assertEqual(settings.auth.fork_token, "default-fork")
@@ -110,60 +100,57 @@ class GitHubConfigTests(unittest.TestCase):
                 directory,
                 '[github]\nfork_token = "default-fork"\n'
                 'pull_request_token = "default-pr"\n'
-                '[github.projects.private_repo]\norigin = "me/private"\n'
-                'upstream = "org/private"\nfork_token = "project-fork"\n',
+                '[github.projects.private_repo]\nfork_token = "project-fork"\n',
                 secure=True,
             )
-            settings = load(config).resolve("me/private", "org/private")
+            settings = load(config).resolve("org/private_repo")
         self.assertEqual(settings.auth.fork_token, "project-fork")
         self.assertEqual(settings.auth.pull_request_token, "")
         self.assertEqual(settings.auth_table, "github.projects.private_repo")
 
-    def test_repository_pair_matching_is_case_insensitive(self) -> None:
+    def test_upstream_repository_name_matching_is_case_insensitive(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             config = self.write_config(
                 directory,
-                '[github.projects.repo]\norigin = "Liuppx/Repo"\n'
-                'upstream = "YeYing-Community/Repo"\n',
+                '[github.projects.Repo]\nmode = "git"\n',
             )
-            settings = load(config).resolve("liuppx/repo", "yeying-community/repo")
+            settings = load(config).resolve("yeying-community/repo")
+        self.assertEqual(settings.project, "Repo")
+
+    def test_upstream_owner_does_not_affect_project_matching(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            config = self.write_config(
+                directory,
+                '[github.projects.repo]\nmode = "git"\n',
+            )
+            settings = load(config).resolve("another-community/repo")
         self.assertEqual(settings.project, "repo")
 
-    def test_partial_project_match_is_rejected(self) -> None:
+    def test_duplicate_project_names_are_rejected_case_insensitively(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             config = self.write_config(
                 directory,
-                '[github.projects.repo]\norigin = "me/repo"\n'
-                'upstream = "org/repo"\n',
+                '[github.projects.Repo]\nmode = "api"\n'
+                '[github.projects.repo]\nmode = "git"\n',
             )
-            with self.assertRaisesRegex(ConfigError, "partially matches"):
-                load(config).resolve("me/repo", "another/repo")
-
-    def test_duplicate_repository_pair_is_rejected(self) -> None:
-        with tempfile.TemporaryDirectory() as directory:
-            config = self.write_config(
-                directory,
-                '[github.projects.first]\norigin = "me/repo"\nupstream = "org/repo"\n'
-                '[github.projects.second]\norigin = "ME/REPO"\nupstream = "ORG/REPO"\n',
-            )
-            with self.assertRaisesRegex(ConfigError, "duplicates repository pair"):
+            with self.assertRaisesRegex(ConfigError, "duplicates project name"):
                 load(config)
 
-    def test_project_requires_origin_and_upstream(self) -> None:
-        with tempfile.TemporaryDirectory() as directory:
-            config = self.write_config(
-                directory,
-                '[github.projects.repo]\norigin = "me/repo"\n',
-            )
-            with self.assertRaisesRegex(ConfigError, "upstream.*owner/repository"):
-                load(config)
+    def test_removed_repository_mapping_fields_are_rejected(self) -> None:
+        for field in ("origin", "upstream"):
+            with self.subTest(field=field), tempfile.TemporaryDirectory() as directory:
+                config = self.write_config(
+                    directory,
+                    f'[github.projects.repo]\n{field} = "owner/repo"\n',
+                )
+                with self.assertRaisesRegex(ConfigError, f"Unsupported key.*{field}"):
+                    load(config)
 
     def test_named_project_resolution_supports_github_app_login(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             config = self.write_config(
                 directory,
-                '[github.projects.private_repo]\norigin = "me/private"\n'
-                'upstream = "org/private"\n'
+                '[github.projects.private_repo]\n'
                 '[github.projects.private_repo.github_app]\nclient_id = "Iv1.test"\n',
             )
             settings = load(config).resolve_project("private_repo")
@@ -233,22 +220,20 @@ class GitHubConfigTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             config = self.write_config(
                 directory,
-                '[github.projects.private_repo]\norigin = "me/private"\n'
-                'upstream = "org/private"\n'
+                '[github.projects.private_repo]\n'
                 '[github.projects.private_repo.github_app]\nclient_id = "Iv1.test"\n',
             )
             with mock.patch.object(github_config, "tomllib", None), mock.patch.object(
                 github_config, "tomli", None
             ):
-                settings = load(config).resolve("me/private", "org/private")
+                settings = load(config).resolve("org/private_repo")
         self.assertEqual(settings.auth.provider, "github_app")
 
     def test_updates_project_github_app_tokens_atomically(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             config = self.write_config(
                 directory,
-                '[github.projects.private_repo]\norigin = "me/private"\n'
-                'upstream = "org/private"\n'
+                '[github.projects.private_repo]\n'
                 '[github.projects.private_repo.github_app]\nclient_id = "Iv1.test"\n',
             )
             update_github_app_tokens(

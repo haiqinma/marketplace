@@ -17,7 +17,7 @@ The default configuration file is:
 The configuration has two layers:
 
 1. `[github]` contains defaults used by every repository.
-2. `[github.projects.<name>]` is optional and applies only when both configured remotes match the current repository.
+2. `[github.projects.<repository>]` is optional and applies when its key matches the repository name parsed from the current `upstream` Git remote.
 
 There are no separate public and private credential profiles and no `visibility` setting. Credentials belong to the default account configuration or a specific project; actual GitHub operations determine whether those credentials have the required access.
 
@@ -43,35 +43,34 @@ Authentication is inferred automatically:
 
 ### Project Overrides
 
-Add a project entry only when a repository pair needs settings different from the defaults:
+Add a project entry only when an upstream repository needs settings different from the defaults:
 
 ```toml
 [github.projects.marketplace]
-origin = "liuppx/marketplace"
-upstream = "yeying-community/marketplace"
+mode = "git"
 ```
 
-The project name, such as `marketplace`, is a local identifier. It may contain letters, digits, `_`, and `-`.
+The project key must equal the upstream repository name, case-insensitively. It may contain letters, digits, `_`, and `-`.
 
-The current Git remotes must match both fields, case-insensitively:
+For these remotes:
 
 ```text
 origin   -> liuppx/marketplace
 upstream -> yeying-community/marketplace
 ```
 
-If only one side matches, delivery stops with a configuration error. This prevents a typo or copied configuration from silently falling back to global credentials.
+the Skill derives `marketplace` from the actual upstream remote and selects `[github.projects.marketplace]`. The origin owner and repository are always read from the actual `origin` remote and are never duplicated in the configuration.
 
-The example above inherits global transport, scripts, and credentials.
+The example above overrides transport and inherits global scripts and credentials. An empty project table has no practical effect and should be omitted.
+
+Different upstream owners with the same repository name select the same project key. If they need different credentials, keep separate config files and choose one with `--config` or `YEYING_GITHUB_CONFIG`.
 
 ### Independent Project Credentials
 
 A project can replace the global authentication completely:
 
 ```toml
-[github.projects.internal_service]
-origin = "liuppx/internal-service"
-upstream = "example-org/internal-service"
+[github.projects.internal-service]
 mode = "api"
 fork_token = "<PAT that writes the private personal fork>"
 pull_request_token = "<PAT that reads both repositories and creates the PR>"
@@ -174,18 +173,16 @@ python3 scripts/github_app_login.py --project default
 Project-specific GitHub App configuration:
 
 ```toml
-[github.projects.internal_service]
-origin = "liuppx/internal-service"
-upstream = "example-org/internal-service"
+[github.projects.internal-service]
 
-[github.projects.internal_service.github_app]
+[github.projects.internal-service.github_app]
 client_id = "Iv1.xxxxxxxxxxxxxxxx"
 ```
 
 Login and store that project's App token:
 
 ```bash
-python3 scripts/github_app_login.py --project internal_service
+python3 scripts/github_app_login.py --project internal-service
 ```
 
 The App needs **Metadata: Read**, **Contents: Read and write**, and **Pull requests: Read and write**. It must be installed on both repository owners, and the authorizing user must access both repositories. The Skill stores `user_token`, `refresh_token`, and `expires_at` in the selected App table and refreshes expiring user tokens when needed.
@@ -218,7 +215,7 @@ Transport:
 
 1. `--mode`
 2. `YEYING_GITHUB_MODE`
-3. Matching `[github.projects.<name>]`
+3. Matching `[github.projects.<repository>]`
 4. `[github]`
 5. Default: `api`
 

@@ -341,7 +341,6 @@ def main() -> int:
     project_upstream = parse_repo(str(project_upstream_url))
     try:
         settings = load(args.config, "api").resolve(
-            f"{repo.owner}/{repo.name}",
             f"{project_upstream.owner}/{project_upstream.name}",
         )
     except ConfigError as exc:

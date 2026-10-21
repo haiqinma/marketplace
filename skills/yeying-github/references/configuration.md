@@ -2,12 +2,12 @@
 
 ## 设计原则
 
-凭证按账号默认值或具体仓库对组织，不按 public/private 组织。仓库可见性不改变凭证选择和交付算法，因此不需要配置或预先探测。
+凭证按账号默认值或具体项目组织，不按 public/private 组织。仓库可见性不改变凭证选择和交付算法，因此不需要配置或预先探测。
 
 配置只有两层：
 
 - `[github]`：所有仓库的默认配置。
-- `[github.projects.<name>]`：精确匹配 origin 和 upstream 的可选项目覆盖。
+- `[github.projects.<repository>]`：按当前 upstream 仓库名自动选择的可选项目覆盖。
 
 ## 默认配置
 
@@ -38,24 +38,25 @@ projects
 
 ```toml
 [github.projects.marketplace]
-origin = "liuppx/marketplace"
-upstream = "yeying-community/marketplace"
+mode = "git"
 ```
 
-项目名称只允许字母、数字、`_` 和 `-`。每个项目必须配置：
+项目 key 必须等于 upstream Git remote 中的仓库名，匹配时不区分大小写。项目名称只允许字母、数字、`_` 和 `-`。
 
 ```text
-origin = "owner/repository"
-upstream = "owner/repository"
+upstream = git@github.com:yeying-community/marketplace.git
+项目 key = marketplace
 ```
 
 匹配规则：
 
-1. 从当前 Git remote 解析 origin 和 upstream。
-2. 两端都匹配时选择该项目，仓库名比较不区分大小写。
-3. 只有一端匹配时停止，避免静默使用默认配置。
-4. 两个项目不得声明相同的仓库对。
-5. 没有任何相关匹配时使用 `[github]`。
+1. 从当前 Git remote 解析真实 origin 和 upstream，remote 是仓库关系和 PR 路由的唯一来源。
+2. 从 upstream 的 `owner/repository` 提取 `repository`。
+3. 使用仓库名匹配 `[github.projects.<repository>]`，比较不区分大小写。
+4. 没有匹配项目时使用 `[github]`。
+5. `origin` 和 `upstream` 不允许出现在项目配置中，避免与 Git remote 形成两套事实来源。
+
+不同 upstream owner 下的同名仓库会选择同一个项目 key。如果它们需要不同凭证，使用不同配置文件，并通过 `--config` 或 `YEYING_GITHUB_CONFIG` 选择。
 
 项目表允许覆盖：
 
@@ -90,8 +91,6 @@ fork_token = "<global-fork>"
 pull_request_token = "<global-pr>"
 
 [github.projects.special]
-origin = "me/special"
-upstream = "org/special"
 fork_token = "<project-fork>"
 ```
 
@@ -116,11 +115,9 @@ client_id = "Iv1.xxxxxxxxxxxxxxxx"
 项目 App 表：
 
 ```toml
-[github.projects.private_repo]
-origin = "me/private-repo"
-upstream = "org/private-repo"
+[github.projects.private-repo]
 
-[github.projects.private_repo.github_app]
+[github.projects.private-repo.github_app]
 client_id = "Iv1.xxxxxxxxxxxxxxxx"
 ```
 
@@ -128,7 +125,7 @@ client_id = "Iv1.xxxxxxxxxxxxxxxx"
 
 ```bash
 python3 scripts/github_app_login.py --project default
-python3 scripts/github_app_login.py --project private_repo
+python3 scripts/github_app_login.py --project private-repo
 ```
 
 登录和刷新会把 `user_token`、`refresh_token`、`expires_at` 原子写回实际提供认证的 App 表。如果项目继承全局 App，使用 `--project <name>` 最终仍会更新 `[github.github_app]`。

@@ -1,6 +1,6 @@
 ---
 name: yeying-github
-description: Publish YeYing repository work from a contributor fork's main branch to origin/main, then reuse or create an accurate pull request into community upstream/main. Use when delivery needs global GitHub defaults with optional per-project overrides, and must switch between native Git/gh scripts and GitHub API transport.
+description: Publish YeYing repository work from a contributor fork's main branch to origin/main, then reuse or create an accurate pull request into community upstream/main. Use when delivery needs global GitHub defaults with optional overrides selected by upstream repository name, and must switch between native Git/gh scripts and GitHub API transport.
 ---
 
 # YeYing GitHub Delivery
@@ -17,14 +17,18 @@ Development happens directly on the contributor fork's `main` branch. Do not cre
 
 Read [references/configuration.md](references/configuration.md) when selecting transport, credentials, or a project override.
 
-Use `[github]` as the default configuration for every repository. Add `[github.projects.<name>]` only when an exact `origin` plus `upstream` pair needs different transport, scripts, or credentials.
+Use `[github]` as the default configuration for every repository. Add `[github.projects.<repository>]` only when an upstream repository needs different transport, scripts, or credentials. The project key must equal the repository name parsed from the current `upstream` Git remote, case-insensitively; do not duplicate `origin` or `upstream` in the configuration.
 
-- Match project overrides by both `origin = "owner/repository"` and `upstream = "owner/repository"`, case-insensitively.
-- Reject partial matches instead of silently using defaults.
+- Treat the actual Git remotes as the only source of repository identity and PR routing.
+- Match an upstream remote resolving to `<owner>/<repository>` with `[github.projects.<repository>]`.
+- Use `[github]` when no project key matches.
 - Project scalar settings override global defaults individually.
 - If a project declares any authentication field, its authentication replaces the global authentication as a unit. Never combine a project `fork_token` with a global `pull_request_token`, or the reverse.
 - If a project declares no authentication fields, it inherits the complete global authentication.
 - Reject the removed `[github.public]` and `[github.private]` credential profiles.
+- Reject removed project `origin` and `upstream` fields instead of silently ignoring them.
+
+Two upstream owners with the same repository name intentionally select the same project key. When those repositories need different credentials, use separate config files selected with `--config` or `YEYING_GITHUB_CONFIG` rather than adding repository mapping fields.
 
 Infer authentication from the selected default or project configuration. Non-empty `fork_token` or `pull_request_token` selects PAT authentication; a `github_app` subtable selects GitHub App authentication. Reject configurations containing both non-empty PAT credentials and a GitHub App table. Reject shared `token`, `provider`, `origin_token`, and `upstream_token` fields.
 

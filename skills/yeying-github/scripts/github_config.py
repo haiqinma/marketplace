@@ -60,8 +60,6 @@ class AuthProfile:
 @dataclass(frozen=True)
 class ProjectOverride:
     name: str
-    origin: str
-    upstream: str
     mode: str
     sync_script: str
     pr_script: str
@@ -105,42 +103,29 @@ class Config:
             ),
         )
 
-    def resolve(self, origin: str, upstream: str) -> Settings:
-        normalized_origin = _repository(origin, "origin")
+    def resolve(self, upstream: str) -> Settings:
         normalized_upstream = _repository(upstream, "upstream")
-        exact = [
+        repository_name = normalized_upstream.split("/", 1)[1]
+        matches = [
             project
             for project in self.projects
-            if project.origin.lower() == normalized_origin.lower()
-            and project.upstream.lower() == normalized_upstream.lower()
+            if project.name.lower() == repository_name.lower()
         ]
-        if len(exact) > 1:
-            names = ", ".join(project.name for project in exact)
+        if len(matches) > 1:
+            names = ", ".join(project.name for project in matches)
             raise ConfigError(
-                f"Multiple project configurations match {origin} -> {upstream}: {names}"
+                f"Multiple project configurations match upstream repository "
+                f"{repository_name!r}: {names}"
             )
-        if exact:
-            return self._settings(exact[0])
-
-        partial = [
-            project
-            for project in self.projects
-            if project.origin.lower() == normalized_origin.lower()
-            or project.upstream.lower() == normalized_upstream.lower()
-        ]
-        if partial:
-            names = ", ".join(project.name for project in partial)
-            raise ConfigError(
-                f"Project configuration {names} partially matches {origin} -> {upstream}; "
-                "both origin and upstream must match exactly"
-            )
+        if matches:
+            return self._settings(matches[0])
         return self._settings(None)
 
     def resolve_project(self, name: str) -> Settings:
-        if name == "default":
+        if name.lower() == "default":
             return self._settings(None)
         for project in self.projects:
-            if project.name == name:
+            if project.name.lower() == name.lower():
                 return self._settings(project)
         available = ", ".join(["default", *(project.name for project in self.projects)])
         raise ConfigError(f"Unknown GitHub project configuration {name!r}; available: {available}")
@@ -285,7 +270,7 @@ def _projects(section: dict[str, object]) -> tuple[ProjectOverride, ...]:
     if not isinstance(raw_projects, dict):
         raise ConfigError("[github.projects] must be a TOML table")
     result: list[ProjectOverride] = []
-    pairs: dict[tuple[str, str], str] = {}
+    names: dict[str, str] = {}
     for name, raw_project in raw_projects.items():
         if not PROJECT_NAME_RE.fullmatch(name):
             raise ConfigError(
@@ -294,11 +279,17 @@ def _projects(section: dict[str, object]) -> tuple[ProjectOverride, ...]:
         if not isinstance(raw_project, dict):
             raise ConfigError(f"[github.projects.{name}] must be a TOML table")
         table_name = f"github.projects.{name}"
+        normalized_name = name.lower()
+        if normalized_name in names:
+            raise ConfigError(
+                f"[{table_name}] duplicates project name configured by "
+                f"[github.projects.{names[normalized_name]}] when compared "
+                "case-insensitively"
+            )
+        names[normalized_name] = name
         _reject_unknown(
             raw_project,
             {
-                "origin",
-                "upstream",
                 "mode",
                 "sync_script",
                 "pr_script",
@@ -306,15 +297,6 @@ def _projects(section: dict[str, object]) -> tuple[ProjectOverride, ...]:
             },
             table_name,
         )
-        origin = _repository(raw_project.get("origin", ""), f"{table_name}.origin")
-        upstream = _repository(raw_project.get("upstream", ""), f"{table_name}.upstream")
-        pair = (origin.lower(), upstream.lower())
-        if pair in pairs:
-            raise ConfigError(
-                f"[{table_name}] duplicates repository pair configured by "
-                f"[github.projects.{pairs[pair]}]"
-            )
-        pairs[pair] = name
         mode = _validated_choice(
             raw_project.get("mode", ""), VALID_MODES, f"{table_name}.mode", empty=True
         )
@@ -326,8 +308,6 @@ def _projects(section: dict[str, object]) -> tuple[ProjectOverride, ...]:
         result.append(
             ProjectOverride(
                 name=name,
-                origin=origin,
-                upstream=upstream,
                 mode=mode,
                 sync_script=str(raw_project.get("sync_script", "")).strip(),
                 pr_script=str(raw_project.get("pr_script", "")).strip(),

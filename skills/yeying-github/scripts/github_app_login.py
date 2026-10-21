@@ -77,7 +77,10 @@ def main() -> int:
     parser.add_argument(
         "--project",
         default="default",
-        help="Named [github.projects.<name>] configuration, or default for [github].",
+        help=(
+            "Upstream repository [github.projects.<repository>] configuration, "
+            "or default for [github]."
+        ),
     )
     args = parser.parse_args()
     try:

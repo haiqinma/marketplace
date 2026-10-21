@@ -17,7 +17,7 @@
 配置分为两层：
 
 1. `[github]` 保存所有仓库共用的默认配置。
-2. `[github.projects.<name>]` 是可选的，只在当前仓库的 origin 和 upstream 都匹配时生效。
+2. `[github.projects.<repository>]` 是可选的，当项目 key 与当前 `upstream` Git remote 中的仓库名匹配时生效。
 
 不再按公共仓库和私有仓库拆分凭证 profile，也不再配置 `visibility`。凭证属于默认账号配置或某个具体项目，实际 GitHub 操作会直接验证这些凭证是否具备所需访问权限。
 
@@ -43,35 +43,34 @@ pull_request_token = "<读取仓库并管理 upstream PR 的 PAT>"
 
 ### 项目覆盖配置
 
-只有某个仓库对需要不同配置时，才增加项目条目：
+只有某个 upstream 仓库需要不同配置时，才增加项目条目：
 
 ```toml
 [github.projects.marketplace]
-origin = "liuppx/marketplace"
-upstream = "yeying-community/marketplace"
+mode = "git"
 ```
 
-`marketplace` 是本地配置名称，可以包含字母、数字、`_` 和 `-`。
+项目 key 必须与 upstream 仓库名一致，匹配时不区分大小写。项目名可以包含字母、数字、`_` 和 `-`。
 
-当前 Git remote 必须同时匹配下面两个字段，匹配时不区分大小写：
+例如当前 remote 是：
 
 ```text
 origin   -> liuppx/marketplace
 upstream -> yeying-community/marketplace
 ```
 
-如果只有一端匹配，交付会直接停止并报告配置错误，不会静默回退到默认凭证。这样可以避免复制配置或拼写错误导致凭证用错项目。
+Skill 会从实际 upstream remote 推导出 `marketplace`，然后选择 `[github.projects.marketplace]`。origin owner 和仓库名始终从实际 `origin` remote 读取，不在配置文件中重复维护。
 
-上面的例子继承默认传输模式、脚本和凭证。
+上面的例子覆盖传输模式，继承默认脚本和凭证。空项目表没有实际作用，应直接省略。
+
+不同 upstream owner 下的同名仓库会选择同一个项目 key。如果它们需要不同凭证，请使用不同配置文件，并通过 `--config` 或 `YEYING_GITHUB_CONFIG` 选择，不再增加仓库映射字段。
 
 ### 项目独立凭证
 
 项目可以完整替换默认认证：
 
 ```toml
-[github.projects.internal_service]
-origin = "liuppx/internal-service"
-upstream = "example-org/internal-service"
+[github.projects.internal-service]
 mode = "api"
 fork_token = "<写入个人私有 fork 的 PAT>"
 pull_request_token = "<读取两端私有仓库并创建 PR 的 PAT>"
@@ -174,18 +173,16 @@ python3 scripts/github_app_login.py --project default
 项目独立 GitHub App 配置：
 
 ```toml
-[github.projects.internal_service]
-origin = "liuppx/internal-service"
-upstream = "example-org/internal-service"
+[github.projects.internal-service]
 
-[github.projects.internal_service.github_app]
+[github.projects.internal-service.github_app]
 client_id = "Iv1.xxxxxxxxxxxxxxxx"
 ```
 
 登录并保存该项目的 App token：
 
 ```bash
-python3 scripts/github_app_login.py --project internal_service
+python3 scripts/github_app_login.py --project internal-service
 ```
 
 App 需要 **Metadata: Read**、**Contents: Read and write**、**Pull requests: Read and write**，并安装到 fork 和 upstream 两边。授权用户本身也必须访问两端仓库。Skill 会把 `user_token`、`refresh_token` 和 `expires_at` 写入选中的 App 配置表，并在需要时自动刷新。
@@ -218,7 +215,7 @@ mode = "git"
 
 1. `--mode`
 2. `YEYING_GITHUB_MODE`
-3. 匹配的 `[github.projects.<name>]`
+3. 匹配的 `[github.projects.<repository>]`
 4. `[github]`
 5. 默认值：`api`
 

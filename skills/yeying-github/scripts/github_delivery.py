@@ -312,7 +312,7 @@ def main() -> int:
     title = validate_title(args.title)
     root, origin_repo, upstream_repo = ensure_fork_main()
     try:
-        settings = load(args.config, args.mode).resolve(origin_repo, upstream_repo)
+        settings = load(args.config, args.mode).resolve(upstream_repo)
     except ConfigError as exc:
         raise SystemExit(str(exc)) from exc
     if args.skip_sync and settings.mode != "git":

@@ -1,4 +1,4 @@
 interface:
   display_name: "夜莺 GitHub 交付"
-  short_description: "使用默认或项目配置同步 fork 并提交 PR"
-  default_prompt: "使用 $yeying-github 解析默认配置或匹配的项目覆盖，通过 PAT 或 GitHub App 将个人 main 发布到 origin/main，并复用或创建指向社区 upstream/main 的 PR。"
+  short_description: "按 upstream 项目配置同步 fork 并提交 PR"
+  default_prompt: "使用 $yeying-github 解析默认配置或按 upstream 仓库名匹配项目覆盖，通过 PAT 或 GitHub App 将个人 main 发布到 origin/main，并复用或创建指向社区 upstream/main 的 PR。"
