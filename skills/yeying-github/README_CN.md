@@ -145,6 +145,20 @@ Fine-grained PAT 绑定一个 resource owner。成为另一个个人账号仓库
 
 该 PAT 所属用户必须能读取两个私有仓库、更新个人 fork，并向 upstream 创建 PR。在需要时完成组织审批、SAML SSO 授权和 IP allow list 要求。
 
+创建 Token 时，应登录拥有个人 fork 的账号。进入 GitHub 的 **Settings > Developer settings > Personal access tokens > Tokens (classic) > Generate new token (classic)**，选择 `repo`、设置有效期；如果 upstream 组织启用了 SAML SSO，还要通过 **Configure SSO** 授权该组织。组织也可能要求管理员批准 Token，批准前访问私有仓库会失败。
+
+公共项目继续使用较小权限的默认凭证，私有凭证放在项目覆盖中。例如 remotes 是 `liuppx/billing` 和 `yeying-community/billing`：
+
+```toml
+[github.projects.billing]
+fork_token = "<liuppx 账号具有 repo scope 的 Classic PAT>"
+pull_request_token = "<同一枚 liuppx Classic PAT>"
+```
+
+项目 key 是 `billing`，因为 upstream 仓库是 `yeying-community/billing`。不要增加 `origin`、`upstream`、`visibility` 或 `provider`。同一个 PAT 明确填写两次是有意设计：`fork_token` 更新个人 fork，`pull_request_token` 读取两个私有仓库并创建 upstream PR；实现不会在两个字段之间隐式共享凭证。
+
+把两枚 Fine-grained PAT 按 owner 拆开，通常不足以完成私有跨 owner PR。某枚 Token 即使可以管理 upstream PR，只要它看不到私有 head fork，就可能成功查询 upstream PR，却在比较或创建 `fork-owner:main -> upstream-owner:main` 时失败。
+
 如果两个仓库属于同一个 resource owner，也可以使用同时选择两端仓库、具有 Contents read/write 和 Pull requests read/write 的 Fine-grained PAT。
 
 只有提交确实修改 `.github/workflows/` 时才额外选择：
@@ -154,6 +168,32 @@ Fine-grained PAT 绑定一个 resource owner。成为另一个个人账号仓库
 ```
 
 不要申请无关的企业、组织、包、Hook、用户、密钥或仓库管理权限。
+
+### 私有 Fork 访问检查
+
+配置私有项目后，在第一次交付前从目标仓库运行只读检查：
+
+```bash
+python3 /path/to/yeying-github/scripts/github_access_check.py
+```
+
+命令会读取实际的 `origin` 和 `upstream` remotes，按 upstream 仓库名选择项目配置，并验证：
+
+- `origin` 是真正的 GitHub fork，且 parent 正是当前 upstream。
+- API 模式凭证可以写入个人 fork。
+- PR 凭证可以读取两个私有仓库。
+- PR 凭证可以比较 `upstream/main...fork-owner:main`。
+
+准备完成时，输出结尾应为：
+
+```text
+fork publish access: verified
+pull request repository access: verified
+private head comparison: verified (ahead=<n>, behind=<n>)
+access check: ready
+```
+
+对于私有仓库，HTTP 404 通常表示当前凭证看不到仓库，并不一定表示仓库不存在。如果 upstream 可以访问，但 origin 或 compare 返回 404，应改用一枚属于 fork owner、具有 `repo` scope 的 Classic PAT，或者使用同时安装在两端 owner 上的 GitHub App。
 
 ### GitHub App
 

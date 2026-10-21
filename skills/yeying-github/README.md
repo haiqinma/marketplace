@@ -145,6 +145,20 @@ For a private fork and upstream under different resource owners, prefer one cont
 
 The PAT owner must be able to read both private repositories, update the personal fork, and create a PR into upstream. Complete organization approval, SAML SSO authorization, and IP allow-list requirements where applicable.
 
+Create the token while signed in as the account that owns the personal fork. In GitHub, open **Settings > Developer settings > Personal access tokens > Tokens (classic) > Generate new token (classic)**, select `repo`, choose an expiration, and authorize the token for the upstream organization through **Configure SSO** when SAML SSO is enabled. An organization may also require an administrator to approve the token before private repositories become accessible.
+
+Keep public defaults narrowly scoped and place the private credential in a project override. For example, when the remotes are `liuppx/billing` and `yeying-community/billing`:
+
+```toml
+[github.projects.billing]
+fork_token = "<liuppx classic PAT with repo scope>"
+pull_request_token = "<the same liuppx classic PAT>"
+```
+
+The project key is `billing` because the upstream repository is `yeying-community/billing`. Do not add `origin`, `upstream`, `visibility`, or `provider`. Writing the same PAT twice is intentional: `fork_token` updates the personal fork, while `pull_request_token` reads both private repositories and creates the upstream PR. The implementation never shares one field implicitly with the other.
+
+Two fine-grained PATs split across owners are usually insufficient for a private cross-owner PR. A token that can manage upstream but cannot read the private head fork may list upstream PRs successfully and still fail when comparing or creating `fork-owner:main -> upstream-owner:main`.
+
 When both repositories belong to one resource owner, a fine-grained PAT selecting both repositories with Contents read/write and Pull requests read/write may also work.
 
 Add this scope only when committed changes modify `.github/workflows/`:
@@ -154,6 +168,32 @@ Add this scope only when committed changes modify `.github/workflows/`:
 ```
 
 Do not request unrelated enterprise, organization, package, hook, user, key, or repository administration scopes.
+
+### Private Fork Access Check
+
+Run this read-only check from the target repository after configuring a private project and before the first delivery:
+
+```bash
+python3 /path/to/yeying-github/scripts/github_access_check.py
+```
+
+The command reads the actual `origin` and `upstream` remotes, selects the project configuration from the upstream repository name, and verifies:
+
+- `origin` is a real GitHub fork whose parent is the configured upstream remote.
+- API mode credentials can write the personal fork.
+- The PR credential can read both private repositories.
+- GitHub can compare `upstream/main...fork-owner:main` with the PR credential.
+
+A ready result ends with:
+
+```text
+fork publish access: verified
+pull request repository access: verified
+private head comparison: verified (ahead=<n>, behind=<n>)
+access check: ready
+```
+
+For private repositories, HTTP 404 commonly means the selected credential cannot see that repository, not that the repository is absent. If upstream access succeeds but origin or comparison returns 404, replace the split credential setup with one fork-owner Classic PAT using `repo`, or use a GitHub App installed on both owners.
 
 ### GitHub App
 

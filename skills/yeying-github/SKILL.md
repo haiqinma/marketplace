@@ -56,6 +56,8 @@ The default is `api`. Override it with `--mode`, `YEYING_GITHUB_MODE`, a matched
 
 For GitHub App authentication, run `scripts/github_app_login.py --project default` for the global App or `--project <name>` for a project App. The App must be installed on both repository owners, the authorizing user must access both repositories, and the App needs Metadata read, Contents read/write, and Pull requests read/write permissions.
 
+For a private cross-owner fork, prefer a project-specific configuration containing one Classic PAT owned by the fork owner, with `repo` scope, written explicitly to both `fork_token` and `pull_request_token`. Complete organization approval and SAML SSO authorization when required. Before the first private delivery, run `scripts/github_access_check.py` from the target repository. Require it to verify the GitHub fork parent, fork publishing access, both repositories through the PR credential, and the private head comparison. A PR credential that can read upstream but returns 404 for the private origin cannot create a reliable cross-repository PR.
+
 ## Workflow
 
 1. Inspect `git status`, `main`, `origin`, `upstream`, and the complete `upstream/main..HEAD` commit and diff range.

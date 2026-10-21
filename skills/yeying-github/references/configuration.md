@@ -44,7 +44,7 @@ mode = "git"
 项目 key 必须等于 upstream Git remote 中的仓库名，匹配时不区分大小写。项目名称只允许字母、数字、`_` 和 `-`。
 
 ```text
-upstream = git@github.com:yeying-community/marketplace.git
+Git remote upstream -> git@github.com:yeying-community/marketplace.git
 项目 key = marketplace
 ```
 
@@ -164,6 +164,24 @@ public_repo
 ```text
 repo
 ```
+
+推荐由个人 fork owner 创建该 Token，并在项目表的两个字段中明确填写同一个值：
+
+```toml
+[github.projects.billing]
+fork_token = "<fork owner Classic PAT with repo scope>"
+pull_request_token = "<the same Classic PAT>"
+```
+
+Token owner 必须访问两端私有仓库。组织启用 SAML SSO 时需要执行 Configure SSO；组织启用 PAT 审批时需要等待批准。两枚分别绑定不同 resource owner 的 Fine-grained PAT，可能形成“fork_token 只能看 origin、pull_request_token 只能看 upstream”的断裂权限，无法比较私有 head 或创建跨仓库 PR。
+
+首次私有交付前运行：
+
+```bash
+python3 scripts/github_access_check.py
+```
+
+该检查显式验证 fork parent、个人 fork 写权限、PR Token 对两端仓库的读取权限，以及 `base...fork-owner:head` compare。它不会打印 Token，也不会修改 GitHub 状态。
 
 修改 `.github/workflows/` 时按需增加：
 
