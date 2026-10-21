@@ -186,6 +186,15 @@ def file_b64_at(sha: str, path: str) -> str:
     return base64.b64encode(data).decode()
 
 
+def tree_for_changes(repo: Repo, parent_sha: str, entries: list[dict[str, Any]]) -> str:
+    parent_commit = gh(repo, "GET", f"/git/commits/{parent_sha}")
+    parent_tree = parent_commit["tree"]["sha"]
+    if not entries:
+        return parent_tree
+    tree = gh(repo, "POST", "/git/trees", {"base_tree": parent_tree, "tree": entries})
+    return str(tree["sha"])
+
+
 def is_ancestor(base: str, head: str) -> bool:
     return subprocess.run(["git", "merge-base", "--is-ancestor", base, head]).returncode == 0
 
@@ -485,8 +494,7 @@ def main() -> int:
                 }
             )
 
-        parent_commit = gh(repo, "GET", f"/git/commits/{parent_sha}")
-        tree = gh(repo, "POST", "/git/trees", {"base_tree": parent_commit["tree"]["sha"], "tree": entries})
+        tree_sha = tree_for_changes(repo, parent_sha, entries)
         meta = commit_meta(local_sha)
         commit = gh(
             repo,
@@ -494,7 +502,7 @@ def main() -> int:
             "/git/commits",
             {
                 "message": meta["message"],
-                "tree": tree["sha"],
+                "tree": tree_sha,
                 "parents": [parent_sha],
                 "author": meta["author"],
                 "committer": meta["committer"],

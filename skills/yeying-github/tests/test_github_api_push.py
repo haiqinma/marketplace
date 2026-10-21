@@ -65,6 +65,17 @@ class GitHubApiPushTests(unittest.TestCase):
         self.assertEqual(patch_call.args[1], "PATCH")
         self.assertEqual(patch_call.args[3], {"title": "feat: accurate title"})
 
+    def test_empty_commit_reuses_parent_tree_without_creating_empty_tree(self) -> None:
+        repo = github_api_push.Repo("liuppx", "repo")
+        with mock.patch.object(
+            github_api_push,
+            "gh",
+            return_value={"tree": {"sha": "parent-tree"}},
+        ) as gh:
+            tree_sha = github_api_push.tree_for_changes(repo, "parent-commit", [])
+        self.assertEqual(tree_sha, "parent-tree")
+        gh.assert_called_once_with(repo, "GET", "/git/commits/parent-commit")
+
 
 if __name__ == "__main__":
     unittest.main()
