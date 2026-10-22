@@ -1,0 +1,4 @@
+interface:
+  display_name: "YeYing Ops"
+  short_description: "Analyze, audit, and govern production findings"
+  default_prompt: "Analyze production errors using sanitized evidence, create or reconcile a human audit task when configured, and never modify code or production without a separately approved remediation task."
