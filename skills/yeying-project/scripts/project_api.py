@@ -170,6 +170,15 @@ def request_api(
     return payload.get("data")
 
 
+def ensure_task_dialog_id(config: dict[str, str], task_id: int) -> int:
+    """Create or reuse the task discussion and return its dialog ID."""
+    data = request_api(config, "GET", "/api/project/task/dialog", {"task_id": task_id})
+    dialog_id = int(data.get("dialog_id") or 0) if isinstance(data, dict) else 0
+    if dialog_id <= 0:
+        raise ProjectApiError(f"任务 {task_id} 的对话创建失败")
+    return dialog_id
+
+
 
 def build_multipart(file_field: str, file_path: Path) -> tuple[bytes, str]:
     """Build a multipart/form-data body containing only the file field."""
@@ -402,9 +411,9 @@ def main() -> int:
             if args.content_file:
                 text = args.content_file.read_text(encoding="utf-8")
             text = normalize_comment_content(text)
-            dialog = request_api(config, "GET", "/api/project/task/dialog", {"task_id": args.task_id})
+            dialog_id = ensure_task_dialog_id(config, args.task_id)
             params = {
-                "dialog_id": dialog["dialog_id"], "text": text, "text_type": "md",
+                "dialog_id": dialog_id, "text": text, "text_type": "md",
             }
             if args.update_id:
                 params["update_id"] = args.update_id

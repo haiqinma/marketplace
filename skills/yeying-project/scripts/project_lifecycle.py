@@ -19,7 +19,7 @@ from project_agent_context import (
     merge_state_agent_context,
     primary_model,
 )
-from project_api import ProjectApiError, load_config, markdown_to_task_html, request_api
+from project_api import ProjectApiError, ensure_task_dialog_id, load_config, markdown_to_task_html, request_api
 from project_execution_archive import redact
 from project_task_binding import task_marker_name
 
@@ -301,10 +301,7 @@ def record_summary(kind: str, data: dict[str, Any]) -> str:
 
 def publish_record(state: dict[str, Any], record: dict[str, Any], config_path: str | Path | None = None) -> bool:
     api = load_config(config_path)
-    task = request_api(api, "GET", "/api/project/task/one", {"task_id": state["task_id"]})
-    dialog_id = int(task.get("dialog_id") or 0)
-    if not dialog_id:
-        raise ProjectApiError(f"任务 {state['task_id']} 没有可用对话")
+    dialog_id = ensure_task_dialog_id(api, int(state["task_id"]))
     messages = request_api(api, "GET", "/api/dialog/msg/list", {"dialog_id": dialog_id, "take": 100})
     text = json.dumps(messages, ensure_ascii=False)
     marker = f"[lifecycle:{state['task_id']}:{record['kind']}:{record['sha256'][:16]}]"

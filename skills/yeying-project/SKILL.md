@@ -142,6 +142,8 @@ All successful commands print JSON to stdout. Failures print a concise error to 
 9. Advance to `completed` only after the PR, verification and audit archive are all present. Post a concise durable result comment; do not post routine tool narration.
 10. Keep the user's chat response aligned with what was written back to Project.
 
+Task comments, lifecycle record publication, and execution archive publication automatically call Project's task-dialog endpoint. If the task has no `dialog_id`, Project creates the chat and returns its reusable ID. The caller still needs project membership and task visibility.
+
 ## Task Execution Archive
 
 When an AI client or Agent is carrying out a concrete Project task, preserve the complete history available to the caller: user messages, assistant messages, tool calls, tool results, attachment references, decisions, and the final result. Start an `executionId`, append records as they become available, finalize the three archive files, then publish them to the task. The archive must be marked incomplete when the host cannot expose hidden context or full tool output. Use the same `executionId` for retries so publication can verify and reuse existing task attachments.

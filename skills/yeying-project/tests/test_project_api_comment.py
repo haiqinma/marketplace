@@ -10,6 +10,23 @@ import project_api  # noqa: E402
 
 
 class ProjectApiCommentTest(unittest.TestCase):
+    def test_ensure_task_dialog_creates_or_reuses_project_dialog(self):
+        calls = []
+
+        def request(_config, method, path, params, **_kwargs):
+            calls.append((method, path, params))
+            return {"dialog_id": 456}
+
+        with mock.patch.object(project_api, "request_api", side_effect=request):
+            self.assertEqual(project_api.ensure_task_dialog_id({}, 123), 456)
+
+        self.assertEqual(calls, [("GET", "/api/project/task/dialog", {"task_id": 123})])
+
+    def test_ensure_task_dialog_rejects_empty_dialog_id(self):
+        with mock.patch.object(project_api, "request_api", return_value={"dialog_id": 0}):
+            with self.assertRaisesRegex(project_api.ProjectApiError, "对话创建失败"):
+                project_api.ensure_task_dialog_id({}, 123)
+
     def test_comment_sends_model_name(self):
         calls = []
 

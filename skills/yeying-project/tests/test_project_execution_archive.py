@@ -10,9 +10,18 @@ from unittest import mock
 SCRIPTS = Path(__file__).parents[1] / "scripts"
 sys.path.insert(0, str(SCRIPTS))
 import project_execution_archive as archive  # noqa: E402
+import project_api  # noqa: E402
 
 
 class ExecutionArchiveTest(unittest.TestCase):
+    def test_task_dialog_id_creates_or_reuses_dialog(self):
+        with mock.patch.object(project_api, "request_api", return_value={"dialog_id": 456}) as request:
+            self.assertEqual(archive.task_dialog_id({}, 123), 456)
+
+        request.assert_called_once_with(
+            {}, "GET", "/api/project/task/dialog", {"task_id": 123}
+        )
+
     def test_default_paths_are_scoped_by_task_id(self):
         root = Path("/tmp/workspace")
         self.assertEqual(

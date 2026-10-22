@@ -142,16 +142,18 @@ class LifecycleTest(unittest.TestCase):
             "data": {"recommendation": "A"},
         }
         with mock.patch.object(lifecycle, "load_config", return_value={"url": "https://example.invalid"}), \
+             mock.patch.object(lifecycle, "ensure_task_dialog_id", return_value=456) as ensure_dialog, \
              mock.patch.object(lifecycle, "request_api", side_effect=[
-                 {"dialog_id": 456},
                  [],
                  {"id": 1},
              ]) as request:
             self.assertTrue(lifecycle.publish_record(state, record))
-            sent = request.call_args_list[2].args[3]
+            ensure_dialog.assert_called_once_with({"url": "https://example.invalid"}, 123)
+            sent = request.call_args_list[1].args[3]
             self.assertEqual(sent["model_name"], "gpt-test")
-            request.side_effect = [{"dialog_id": 456}, [lifecycle.render_record_comment(state, record)]]
+            request.side_effect = [[lifecycle.render_record_comment(state, record)]]
             self.assertFalse(lifecycle.publish_record(state, record))
+            self.assertEqual(ensure_dialog.call_count, 2)
 
     def test_archive_link_validates_manifest_files_and_binding(self):
         with tempfile.TemporaryDirectory() as tmp:

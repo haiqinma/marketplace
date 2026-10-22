@@ -25,7 +25,7 @@ from project_agent_context import (
     merge_state_agent_context,
     primary_model,
 )
-from project_api import ProjectApiError, load_config, request_api, request_upload
+from project_api import ProjectApiError, ensure_task_dialog_id, load_config, request_api, request_upload
 
 
 SCHEMA = "yeying.project.execution-archive.v1"
@@ -283,11 +283,10 @@ def finalize_state(state: dict[str, Any], output_dir: Path) -> dict[str, Any]:
 
 
 def task_dialog_id(api: dict[str, str], task_id: int) -> int:
-    task = request_api(api, "GET", "/api/project/task/one", {"task_id": task_id})
-    dialog_id = int(task.get("dialog_id") or 0)
-    if not dialog_id:
-        raise ProjectApiError(f"任务 {task_id} 没有可用对话，无法上传任务附件")
-    return dialog_id
+    try:
+        return ensure_task_dialog_id(api, task_id)
+    except ProjectApiError as exc:
+        raise ProjectApiError(f"任务 {task_id} 没有可用对话，无法上传任务附件: {exc}") from exc
 
 
 def existing_task_files(api: dict[str, str], task_id: int) -> dict[str, dict[str, Any]]:

@@ -26,6 +26,7 @@ Sort GET query parameters by name and encode with RFC 3986 rules. Array paramete
 | `tasks` | `GET /api/project/task/lists` | 项目范围 |
 | `task-create` | `POST /api/project/task/add` | 项目范围；需要任务创建权限 |
 | `task` | `GET /api/project/task/one` 等 | 项目范围 |
+| task dialog | `GET /api/project/task/dialog` | 项目范围；创建或获取任务聊天室 |
 | `comment` | `POST /api/dialog/msg/sendtext` | 项目范围；`--model` 或 `YEYING_AGENT_MODEL` 作为 `model_name`；传入 `--update-id` 时编辑当前用户的指定消息 |
 | `update` | `POST /api/project/task/update` | 项目范围 |
 | `status` | `POST /api/project/task/update` | 项目范围 |
@@ -54,7 +55,7 @@ The server treats the token as its owner's signed authentication method and reus
 
 File cabinet endpoints require the Project token `file_cabinet` permission scope. File cabinet authorization is then userid-scoped: the token can access files owned by the token user, files created by the token user, and files shared to the token user. Requests without a specific `id` parameter (listing, searching, root-level creation) are authorized by the scope gate first and then by the controller layer through `User::auth()` and `File::permissionFind`.
 
-任务执行归档使用目标任务的 `dialog_id` 调用 `dialog/msg/sendfile`。Project 会把任务对话中的非图片文件登记到任务附件，随后可通过 `project/task/files`、`project/task/filedown` 读取和校验。该路径与用户文件柜是不同的授权边界。
+任务评论、生命周期记录发布和执行归档发布前都会调用 `project/task/dialog` 创建或获取目标任务聊天室；如果任务尚无 `dialog_id`，Project 会在该请求中创建并回写。随后执行归档使用目标任务的 `dialog_id` 调用 `dialog/msg/sendfile`。Project 会把任务对话中的非图片文件登记到任务附件，随后可通过 `project/task/files`、`project/task/filedown` 读取和校验。该路径与用户文件柜是不同的授权边界。
 
 Chunked upload endpoints under `/api/upload/*` are only authorized for `scene=file_cabinet` sessions when called with AK/SK. The `file_cabinet` scope does not authorize `image`, `generic_file`, or `dialog_file` upload scenes.
 
