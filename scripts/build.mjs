@@ -3,7 +3,6 @@ import path from "node:path";
 
 const root = process.cwd();
 const skillsDir = path.join(root, "skills");
-const chatSkillsDir = path.join(skillsDir, "chat");
 const toolServersDir = path.join(root, "tools", "servers");
 const languages = ["cn", "en"];
 
@@ -43,6 +42,69 @@ function validateSkill(skill, file) {
   assert(skill.release?.status !== "removed", `${file}: removed skills should not be committed`);
 }
 
+function validateAgentSkill(skillFolder) {
+  const file = path.join(skillsDir, skillFolder, "SKILL.md");
+  const relative = path.relative(root, file);
+  const content = fs.readFileSync(file, "utf8");
+  const frontmatter = content.match(/^---\r?\n([\s\S]*?)\r?\n---(?:\r?\n|$)/);
+  assert(frontmatter, `${relative}: SKILL.md must start with YAML frontmatter`);
+  const rawName = frontmatter[1].match(/^name:\s*(.+?)\s*$/m)?.[1];
+  const name = rawName?.match(/^(['"])(.*)\1$/)?.[2] ?? rawName;
+  assert(name && !name.includes(" ") && !name.includes("#"), `${relative}: frontmatter name is required`);
+  assert(name === skillFolder, `${relative}: skill name must match parent folder ${skillFolder}`);
+}
+
+function validateSkillReadme(skillFolder) {
+  const englishFile = path.join(skillsDir, skillFolder, "README.md");
+  const chineseFile = path.join(skillsDir, skillFolder, "README_CN.md");
+  const englishRelative = path.relative(root, englishFile);
+  const chineseRelative = path.relative(root, chineseFile);
+
+  assert(
+    fs.existsSync(englishFile),
+    `${englishRelative}: English README.md is required`,
+  );
+  assert(
+    fs.existsSync(chineseFile),
+    `${chineseRelative}: Chinese README_CN.md is required`,
+  );
+
+  const english = fs.readFileSync(englishFile, "utf8").trim();
+  const chinese = fs.readFileSync(chineseFile, "utf8").trim();
+  assert(
+    /^#\s+\S.+$/m.test(english),
+    `${englishRelative}: README.md must contain a level-one title`,
+  );
+  assert(
+    /^#\s+\S.+$/m.test(chinese),
+    `${chineseRelative}: README_CN.md must contain a level-one title`,
+  );
+  assert(
+    /[A-Za-z]{3}/.test(english),
+    `${englishRelative}: README.md must contain English content`,
+  );
+  assert(
+    /[\u3400-\u9fff]/u.test(chinese),
+    `${chineseRelative}: README_CN.md must contain Chinese content`,
+  );
+  assert(
+    /^### Configuration\s*$/m.test(english),
+    `${englishRelative}: README.md must contain a Configuration section`,
+  );
+  assert(
+    /^### 配置\s*$/m.test(chinese),
+    `${chineseRelative}: README_CN.md must contain a 配置 section`,
+  );
+  assert(
+    /\(README_CN\.md\)/.test(english),
+    `${englishRelative}: README.md must link to README_CN.md`,
+  );
+  assert(
+    /\(README\.md\)/.test(chinese),
+    `${chineseRelative}: README_CN.md must link to README.md`,
+  );
+}
+
 function validateToolServer(server, file) {
   assert(server.schemaVersion === "1.0", `${file}: schemaVersion must be 1.0`);
   assert(
@@ -60,6 +122,50 @@ function validateToolServer(server, file) {
   assert(typeof server.command === "string" && server.command, `${file}: command is required`);
   assert(Array.isArray(server.baseArgs), `${file}: baseArgs must be an array`);
   assert(typeof server.configurable === "boolean", `${file}: configurable must be a boolean`);
+  if (server.runtimes !== undefined) {
+    assert(
+      Array.isArray(server.runtimes) &&
+        server.runtimes.length > 0 &&
+        server.runtimes.every((runtime) => ["standalone", "desktop"].includes(runtime)),
+      `${file}: runtimes must contain standalone and/or desktop`,
+    );
+  }
+  if (server.platforms !== undefined) {
+    assert(
+      Array.isArray(server.platforms) &&
+        server.platforms.length > 0 &&
+        server.platforms.every((platform) => ["macos", "windows", "linux"].includes(platform)),
+      `${file}: platforms must contain supported platform ids`,
+    );
+  }
+  if (server.permissions !== undefined) {
+    assert(
+      Array.isArray(server.permissions) &&
+        server.permissions.every(
+          (permission) =>
+            typeof permission?.id === "string" &&
+            permission.id.length > 0 &&
+            isLocalizedText(permission.description),
+        ),
+      `${file}: permissions must declare an id and localized description`,
+    );
+  }
+  if (server.requirements !== undefined) {
+    assert(
+      Array.isArray(server.requirements) && server.requirements.every(isLocalizedText),
+      `${file}: requirements must be localized text entries`,
+    );
+  }
+  if (server.configSchema?.properties) {
+    Object.entries(server.configSchema.properties).forEach(([key, property]) => {
+      if (property && property.sensitive !== undefined) {
+        assert(
+          typeof property.sensitive === "boolean",
+          `${file}: configSchema.properties.${key}.sensitive must be boolean`,
+        );
+      }
+    });
+  }
   assert(server.release?.status !== "removed", `${file}: removed tool servers should not be committed`);
 }
 
@@ -67,30 +173,22 @@ function collectSkills() {
   const grouped = {};
   const skillIndex = [];
   const seen = new Set();
+  let agentSkillCount = 0;
 
   for (const lang of languages) {
     grouped[lang] = [];
   }
 
-  for (const lang of languages) {
-    const legacyDir = path.join(skillsDir, lang);
-    if (!fs.existsSync(legacyDir)) continue;
-    const legacyFiles = fs.readdirSync(legacyDir).filter((file) => file.endsWith(".json"));
-    assert(
-      legacyFiles.length === 0,
-      `skills/${lang}: Chat skills must be stored as skills/chat/<skill-id>/${lang}.json`,
-    );
-  }
-
-  if (!fs.existsSync(chatSkillsDir)) {
+  if (!fs.existsSync(skillsDir)) {
     return {
       skillIndex,
       grouped,
+      agentSkillCount,
     };
   }
 
   const skillFolders = fs
-    .readdirSync(chatSkillsDir, { withFileTypes: true })
+    .readdirSync(skillsDir, { withFileTypes: true })
     .filter((entry) => entry.isDirectory())
     .map((entry) => entry.name)
     .sort();
@@ -98,11 +196,25 @@ function collectSkills() {
   for (const skillFolder of skillFolders) {
     assert(
       /^[a-z0-9][a-z0-9-]*[a-z0-9]$/.test(skillFolder),
-      `skills/chat/${skillFolder}: folder must be kebab-case`,
+      `skills/${skillFolder}: folder must be kebab-case`,
     );
 
+    const skillDir = path.join(skillsDir, skillFolder);
+    const chatLanguages = languages.filter((lang) => fs.existsSync(path.join(skillDir, `${lang}.json`)));
+    const hasAgentSkill = fs.existsSync(path.join(skillDir, "SKILL.md"));
+    assert(
+      chatLanguages.length > 0 || hasAgentSkill,
+      `skills/${skillFolder}: expected cn.json, en.json, or SKILL.md`,
+    );
+    validateSkillReadme(skillFolder);
+
+    if (hasAgentSkill) {
+      validateAgentSkill(skillFolder);
+      agentSkillCount += 1;
+    }
+
     for (const lang of languages) {
-      const absolute = path.join(chatSkillsDir, skillFolder, `${lang}.json`);
+      const absolute = path.join(skillDir, `${lang}.json`);
       if (!fs.existsSync(absolute)) continue;
       const relative = path.relative(root, absolute);
       const skill = readJson(absolute);
@@ -135,6 +247,7 @@ function collectSkills() {
   return {
     skillIndex,
     grouped,
+    agentSkillCount,
   };
 }
 
@@ -176,7 +289,7 @@ function collectToolServers() {
   return { servers, index };
 }
 
-const { skillIndex, grouped } = collectSkills();
+const { skillIndex, grouped, agentSkillCount } = collectSkills();
 const { servers: toolServers, index: toolIndex } = collectToolServers();
 
 writeJson(path.join(root, "index.json"), skillIndex);
@@ -184,5 +297,6 @@ writeJson(path.join(root, "packages.json"), grouped);
 writeJson(path.join(root, "tools", "index.json"), toolIndex);
 writeJson(path.join(root, "tools", "packages.json"), toolServers);
 
-console.log(`Built ${skillIndex.length} skill packages`);
+console.log(`Built ${skillIndex.length} Chat skill packages`);
+console.log(`Validated ${agentSkillCount} Agent skills`);
 console.log(`Built ${toolIndex.length} tool packages`);

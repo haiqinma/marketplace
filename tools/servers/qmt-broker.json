@@ -14,6 +14,23 @@
   "tags": ["community", "broker", "trading", "qmt", "live-trading", "a-share"],
   "command": "npx",
   "baseArgs": ["-y", "@yeying-community/qmt-broker-mcp", "--transport", "stdio"],
+  "runtimes": ["standalone", "desktop"],
+  "platforms": ["windows"],
+  "permissions": [
+    {
+      "id": "local-trading",
+      "description": {
+        "cn": "访问本机 MiniQMT 与 xtquant；若启用实盘配置，可能提交真实交易订单。",
+        "en": "Access local MiniQMT and xtquant; live-trading settings may submit real orders."
+      }
+    }
+  ],
+  "requirements": [
+    {
+      "cn": "仅支持 Windows；需要 Node.js、MiniQMT 和 xtquant。",
+      "en": "Windows only; requires Node.js, MiniQMT, and xtquant."
+    }
+  ],
   "configurable": true,
   "configSchema": {
     "properties": {
@@ -24,6 +41,7 @@
           "en": "MiniQMT userdata_mini path, for example D:\\QMT\\userdata_mini."
         },
         "required": true
+        ,"sensitive": true
       },
       "accountId": {
         "type": "string",

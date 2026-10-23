@@ -1,0 +1,4 @@
+interface:
+  display_name: "夜莺 Project 协作"
+  short_description: "管理 Project 研发任务全生命周期并归档 AI 执行"
+  default_prompt: "使用 $yeying-project 按 Project 研发生命周期协作：读取或创建任务，完成需求分析和方案确认，执行实现与验证，关联 commit/PR，并将可获得的会话和交付结果归档到任务。"

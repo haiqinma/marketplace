@@ -14,6 +14,23 @@
   "tags": ["community", "broker", "trading", "paper", "simulation"],
   "command": "npx",
   "baseArgs": ["-y", "@yeying-community/paper-broker-mcp", "--transport", "stdio"],
+  "runtimes": ["standalone", "desktop"],
+  "platforms": ["macos", "windows", "linux"],
+  "permissions": [
+    {
+      "id": "local-data",
+      "description": {
+        "cn": "在本机保存模拟账户和交易记录。",
+        "en": "Store paper trading accounts and records on this device."
+      }
+    }
+  ],
+  "requirements": [
+    {
+      "cn": "需要已安装 Node.js 和可用的 npx 命令。",
+      "en": "Requires Node.js and the npx command to be available."
+    }
+  ],
   "configurable": true,
   "configSchema": {
     "properties": {

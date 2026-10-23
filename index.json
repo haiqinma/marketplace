@@ -17,7 +17,7 @@
       "summary",
       "web"
     ],
-    "path": "skills/chat/reading-summary/en.json",
+    "path": "skills/reading-summary/en.json",
     "release": {
       "status": "published",
       "review": "approved"
@@ -43,7 +43,7 @@
       "risk",
       "automation"
     ],
-    "path": "skills/chat/strategy-trading/cn.json",
+    "path": "skills/strategy-trading/cn.json",
     "release": {
       "status": "published",
       "review": "approved"
@@ -69,7 +69,7 @@
       "risk",
       "automation"
     ],
-    "path": "skills/chat/strategy-trading/en.json",
+    "path": "skills/strategy-trading/en.json",
     "release": {
       "status": "published",
       "review": "approved"
@@ -93,7 +93,7 @@
       "web",
       "search"
     ],
-    "path": "skills/chat/web-research/cn.json",
+    "path": "skills/web-research/cn.json",
     "release": {
       "status": "published",
       "review": "approved"

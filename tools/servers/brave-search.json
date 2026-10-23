@@ -14,6 +14,23 @@
   "tags": ["official", "search", "web"],
   "command": "npx",
   "baseArgs": ["-y", "@brave/brave-search-mcp-server", "--transport", "stdio"],
+  "runtimes": ["standalone", "desktop"],
+  "platforms": ["macos", "windows", "linux"],
+  "permissions": [
+    {
+      "id": "network",
+      "description": {
+        "cn": "访问 Brave Search API 获取网页搜索结果。",
+        "en": "Access the Brave Search API for web search results."
+      }
+    }
+  ],
+  "requirements": [
+    {
+      "cn": "需要已安装 Node.js 和可用的 npx 命令。",
+      "en": "Requires Node.js and the npx command to be available."
+    }
+  ],
   "configurable": true,
   "configSchema": {
     "properties": {
@@ -24,6 +41,7 @@
           "en": "Brave Search API Key."
         },
         "required": true,
+        "sensitive": true,
         "helpUrl": "https://api-dashboard.search.brave.com/login",
         "helpLabel": {
           "cn": "获取 API Key",
