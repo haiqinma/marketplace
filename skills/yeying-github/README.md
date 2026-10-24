@@ -280,3 +280,5 @@ Run a dry-run first:
 python3 scripts/github_delivery.py --dry-run \
   --title "chore(scope): accurately describe the delivery"
 ```
+
+In API mode, explicitly passing `--body` or `--body-file` updates an existing PR body. Without either option, the wrapper generates a default body only for a new PR and preserves an existing human-maintained body.

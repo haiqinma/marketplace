@@ -112,9 +112,9 @@ def default_body(title: str) -> str:
 
 
 def read_body(args: argparse.Namespace, title: str) -> str:
-    if args.body_file:
+    if args.body_file is not None:
         return Path(args.body_file).expanduser().read_text(encoding="utf-8")
-    if args.body:
+    if args.body is not None:
         return args.body.replace("\\n", "\n")
     return default_body(title)
 
@@ -148,6 +148,8 @@ def api_command(
         command.append("--dry-run")
     if args.allow_dirty:
         command.append("--allow-dirty")
+    if args.body is not None or args.body_file is not None:
+        command.append("--update-existing-pr-body")
     return command
 
 

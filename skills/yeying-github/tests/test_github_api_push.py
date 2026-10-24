@@ -65,6 +65,32 @@ class GitHubApiPushTests(unittest.TestCase):
         self.assertEqual(patch_call.args[1], "PATCH")
         self.assertEqual(patch_call.args[3], {"title": "feat: accurate title"})
 
+    def test_explicit_body_updates_existing_pr_body(self) -> None:
+        source = github_api_push.Repo("liuppx", "repo")
+        base = github_api_push.Repo("yeying-community", "repo")
+        existing = {
+            "number": 7,
+            "html_url": "https://github.com/yeying-community/repo/pull/7",
+            "title": "feat: accurate title",
+            "body": "Old body",
+        }
+        with mock.patch.object(
+            github_api_push, "pull_request_token", return_value="token"
+        ), mock.patch.object(github_api_push, "gh", side_effect=[[existing], {}]) as gh:
+            github_api_push.ensure_pull_request(
+                source_repo=source,
+                source_branch="main",
+                base_repo=base,
+                base_branch="main",
+                title="feat: accurate title",
+                body="Reviewed body",
+                dry_run=False,
+                update_existing_body=True,
+            )
+        patch_call = gh.call_args_list[1]
+        self.assertEqual(patch_call.args[1], "PATCH")
+        self.assertEqual(patch_call.args[3], {"body": "Reviewed body"})
+
     def test_empty_commit_reuses_parent_tree_without_creating_empty_tree(self) -> None:
         repo = github_api_push.Repo("liuppx", "repo")
         with mock.patch.object(

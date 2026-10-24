@@ -48,7 +48,9 @@ class GitHubDeliveryTests(unittest.TestCase):
         self.assertIn("- second", body)
 
     def test_api_command_carries_explicit_title(self) -> None:
-        args = argparse.Namespace(dry_run=True, allow_dirty=True)
+        args = argparse.Namespace(
+            dry_run=True, allow_dirty=True, body=None, body_file=None
+        )
         command = github_delivery.api_command(
             args, self.settings(), "docs: accurate title", "body"
         )
@@ -58,6 +60,16 @@ class GitHubDeliveryTests(unittest.TestCase):
         self.assertNotIn("--visibility", command)
         self.assertIn("--dry-run", command)
         self.assertIn("--allow-dirty", command)
+        self.assertNotIn("--update-existing-pr-body", command)
+
+    def test_explicit_body_updates_existing_pr_body(self) -> None:
+        args = argparse.Namespace(
+            dry_run=True, allow_dirty=False, body_file="/tmp/reviewed.md", body=None
+        )
+        command = github_delivery.api_command(
+            args, self.settings(), "docs: accurate title", "reviewed body"
+        )
+        self.assertIn("--update-existing-pr-body", command)
 
     def test_subprocess_env_replaces_ambient_tokens(self) -> None:
         with mock.patch.dict(
