@@ -274,6 +274,7 @@ def ensure_pull_request(
     title: str,
     body: str,
     dry_run: bool,
+    update_existing_body: bool = False,
 ) -> None:
     pr_token = pull_request_token()
     body = normalize_pr_body(body)
@@ -293,7 +294,9 @@ def ensure_pull_request(
             updates["title"] = title
         current_body = pr.get("body") or ""
         normalized_current_body = normalize_pr_body(current_body)
-        if normalized_current_body != current_body:
+        if update_existing_body and normalized_current_body != body:
+            updates["body"] = body
+        elif normalized_current_body != current_body:
             updates["body"] = normalized_current_body
         if updates:
             if dry_run:
@@ -336,6 +339,11 @@ def main() -> int:
     parser.add_argument("--base-branch", default="main")
     parser.add_argument("--pr-title", default=None)
     parser.add_argument("--pr-body", default=None)
+    parser.add_argument(
+        "--update-existing-pr-body",
+        action="store_true",
+        help="Update an existing PR body when an explicit body was supplied.",
+    )
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--allow-dirty", action="store_true")
     parser.add_argument("--no-update-tracking-ref", action="store_true")
@@ -420,6 +428,7 @@ def main() -> int:
                 title=title,
                 body=body,
                 dry_run=args.dry_run,
+                update_existing_body=args.update_existing_pr_body,
             )
         return 0
 
@@ -460,6 +469,7 @@ def main() -> int:
                 title=pr_title,
                 body=pr_description,
                 dry_run=True,
+                update_existing_body=args.update_existing_pr_body,
             )
         return 0
 
@@ -538,6 +548,7 @@ def main() -> int:
             title=pr_title,
             body=pr_description,
             dry_run=False,
+            update_existing_body=args.update_existing_pr_body,
         )
     return 0
 

@@ -280,3 +280,5 @@ chmod 600 ~/.yeying/skills/github/config.toml
 python3 scripts/github_delivery.py --dry-run \
   --title "chore(scope): accurately describe the delivery"
 ```
+
+API 模式下，显式传入 `--body` 或 `--body-file` 会更新已有 PR 的正文；不传时仅为新 PR 生成默认正文，并保留已有 PR 的人工正文。
