@@ -27,10 +27,14 @@ The script resolves configuration in this order:
 
 The configuration file is TOML:
 
+```toml
 [project]
 url = "http://127.0.0.1:8080"
 access_key = "your-project-access-key"
 secret_key = "your-project-secret-key"
+
+[tester]
+path = "../tester" # optional; relative to the active project root
 ```
 
 Use a custom file with:
@@ -40,6 +44,8 @@ python3 scripts/project_api.py --config /path/to/project.toml projects
 ```
 
 Create the default file at `~/.yeying/skills/project/config.toml`, or point `YEYING_PROJECT_CONFIG` to another local TOML file. Environment variables `YEYING_PROJECT_URL`, `YEYING_PROJECT_AK`, and `YEYING_PROJECT_SK` take precedence over the corresponding TOML fields. Keep this file outside Git and restrict its permissions, for example `chmod 600 ~/.yeying/skills/project/config.toml`.
+
+For new E2E or user-workflow test cases across all YeYing community projects, use the shared Playwright `tester` repository. Its path can be set with `[tester].path` in the selected config; relative paths resolve from the active product project's root. If unset, use the sibling path `<product-project-parent>/tester`. The Project API client only reads `[project]`; `[tester]` is consumed by this workflow. Never add E2E cases to a community project repository. Product-internal unit tests may remain in the product's native test suite.
 
 Legacy JSON files are not part of the shared skill configuration contract.
 
@@ -137,7 +143,7 @@ All successful commands print JSON to stdout. Failures print a concise error to 
 4. Obtain explicit solution approval and advance the lifecycle gate before changing code. A verbal or hidden approval that has no traceable reference does not satisfy the gate.
 5. Inspect the local repository and perform the requested work using its own instructions and quality gates. Keep structured implementation records in the lifecycle state.
 6. Before verification, inspect and update affected local `docs` and `books/yeying` documents. Record the paths, update status, no-change reason when applicable, and cross-project impact as a `documentation` record. PlantUML is optional and should be used only when it makes a complex flow easier to read.
-7. Run verification and record `passed=true` only when the acceptance criteria and documentation closeout are covered. Use `github-api-push` for GitHub push/PR operations, then record the exact repository, branch, commit SHA, PR URL/number, CI and review state in a `pull_request` record.
+7. When a task requires E2E or user-workflow tests, follow [references/testing.md](references/testing.md) and add them to the shared `tester` repository; do not add E2E cases to the product repo. Keep implementation-internal unit tests in the product's native suite when appropriate. Run verification and record `passed=true` only when the acceptance criteria, test results, and documentation closeout are covered. Use `github-api-push` for GitHub push/PR operations, then record the exact repository, branch, commit SHA, PR URL/number, CI and review state in a `pull_request` record.
 8. Capture and publish the available AI execution history with the same task and `executionId`; associate the lifecycle snapshot with `project_execution_archive.py finalize`.
 9. Advance to `completed` only after the PR, verification and audit archive are all present. Post a concise durable result comment; do not post routine tool narration.
 10. Keep the user's chat response aligned with what was written back to Project.

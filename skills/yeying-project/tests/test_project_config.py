@@ -24,6 +24,18 @@ class ProjectConfigTest(unittest.TestCase):
             self.assertEqual(settings.access_key, "ak")
             self.assertEqual(settings.source, "file")
 
+    def test_toml_config_allows_tester_workflow_section(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "config.toml"
+            path.write_text(
+                '[project]\nurl = "http://localhost:8080"\naccess_key = "ak"\nsecret_key = "sk"\n'
+                '[tester]\npath = "../tester"\n',
+                encoding="utf-8",
+            )
+            path.chmod(0o600)
+            settings = load(path)
+            self.assertEqual(settings.base_url, "http://localhost:8080")
+
     def test_environment_overrides_file(self):
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp) / "config.toml"

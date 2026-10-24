@@ -14,7 +14,7 @@
 | `approval` | 负责人确认、确认人和可追溯引用 | 方案确认已记录 |
 | `implementation` | 修改文件、关键决策、实现过程 | 已完成获批方案的实现 |
 | 文档收口记录（`documentation`） | 检查/更新的 `docs`、`books/yeying` 路径、无需更新理由、跨项目影响 | 在 `implementation` 完成后、`verification` 前记录；PlantUML 仅在复杂流程需要时记录 |
-| `verification` | 命令、结果、时间、环境、失败信息 | `passed=true`，且覆盖任务验收标准和文档收口 |
+| `verification` | 命令、结果、时间、环境、失败信息、测试用例位置 | `passed=true`，覆盖验收标准和文档收口；任务级测试用例遵守 [testing.md](testing.md)，E2E 用例放在共享 `tester` 仓库 |
 | `delivery` | 分支、commit SHA、仓库、PR URL/编号 | PR 已创建或复用，状态和 CI 信息已记录 |
 | `audit` | 执行归档、脱敏状态、缺失项、审计索引 | 归档已发布到任务附件并可复用 |
 | `completed` | 最终结果、合并状态或明确阻塞 | PR、验证和归档记录完整 |

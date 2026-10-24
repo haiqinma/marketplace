@@ -24,6 +24,9 @@ The default file is `~/.yeying/skills/project/config.toml`:
 url = "https://project.example.com"
 access_key = "yyak_..."
 secret_key = "<secret shown once>"
+
+[tester]
+path = "../tester" # optional; relative to the active product project root
 ```
 
 Configuration-file selection, from highest to lowest priority:
@@ -39,6 +42,10 @@ Fields:
 - `url`: the Project service origin, without an API path suffix. Obtain it from the Project URL opened in the browser or from the deployment operator.
 - `access_key`: the Access Key of a Project automation token.
 - `secret_key`: the matching Secret Key. It is shown only when the token is created or rotated.
+
+`[tester].path` is an optional path to the shared `tester` test repository. Relative paths resolve from the active product project's root. When unset, use the sibling path `<product-project-parent>/tester`; this applies across all YeYing community projects. The Project API client reads only `[project]`; `[tester]` is consumed by the Agent workflow.
+
+`tester` is the community's shared Playwright/Chromium E2E suite. Put cross-product user workflows and all E2E cases there, not in a product repository. Product-internal unit tests may remain in each product's native test suite.
 
 #### Obtaining Project AK/SK
 
