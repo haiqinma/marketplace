@@ -84,6 +84,52 @@ def default_state_path(workdir: Path, task_id: int) -> Path:
     return workdir / f".project-lifecycle-{task_id}.json"
 
 
+def parse_task_times(value: str) -> list[str]:
+    try:
+        times = json.loads(value)
+    except json.JSONDecodeError as exc:
+        raise ProjectApiError("--times 必须是包含开始和结束时间的 JSON 数组") from exc
+    if not isinstance(times, list) or len(times) != 2 or not all(isinstance(item, str) and item.strip() for item in times):
+        raise ProjectApiError("--times 必须是两个非空时间字符串组成的 JSON 数组")
+    parsed: list[dt.datetime] = []
+    for item in times:
+        normalized = item.strip()
+        for time_format in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%d %H:%M"):
+            try:
+                parsed.append(dt.datetime.strptime(normalized, time_format))
+                break
+            except ValueError:
+                continue
+        else:
+            raise ProjectApiError("--times 时间格式必须是 YYYY-MM-DD HH:MM[:SS]")
+    if parsed[0] >= parsed[1]:
+        raise ProjectApiError("--times 结束时间必须晚于开始时间")
+    return [item.strip() for item in times]
+
+
+def build_create_task_params(args: argparse.Namespace) -> dict[str, Any]:
+    params: dict[str, Any] = {"project_id": args.project_id, "name": args.name}
+    if args.column_id:
+        params["column_id"] = args.column_id
+    if args.content_file:
+        params["content"] = markdown_to_task_html(args.content_file.read_text(encoding="utf-8"))
+    if args.allow_unassigned:
+        params["owner"] = []
+    elif args.owner is not None:
+        owner = int(args.owner)
+        if owner <= 0:
+            raise ProjectApiError("负责人用户 ID 必须是正整数")
+        params["owner"] = owner
+    if args.times:
+        params["times"] = parse_task_times(args.times)
+    elif not args.allow_unscheduled:
+        raise ProjectApiError(
+            "生命周期任务必须指定计划时间：使用 --times '[\"YYYY-MM-DD HH:MM\",\"YYYY-MM-DD HH:MM\"]'，"
+            "或仅在确需无计划任务时传 --allow-unscheduled"
+        )
+    return params
+
+
 def initialize(
     project_id: int,
     task_id: int,
@@ -331,6 +377,12 @@ def build_parser() -> argparse.ArgumentParser:
     create.add_argument("--state", type=Path, help="默认写入工作区 .project-lifecycle-<task-id>.json")
     create.add_argument("--column-id")
     create.add_argument("--content-file", type=Path)
+    create_owner = create.add_mutually_exclusive_group()
+    create_owner.add_argument("--owner", type=int, help="负责人用户 ID；未提供时由服务端使用当前 AK/SK 所属用户")
+    create_owner.add_argument("--allow-unassigned", action="store_true", help="允许创建没有负责人的待认领任务")
+    create_schedule = create.add_mutually_exclusive_group()
+    create_schedule.add_argument("--times", help="计划时间 JSON 数组：[开始时间, 结束时间]")
+    create_schedule.add_argument("--allow-unscheduled", action="store_true", help="允许创建没有明确计划时间的任务")
     create.add_argument("--config", help="Project TOML 配置文件")
     add_agent_arguments(create, include_source_tool=True)
 
@@ -382,11 +434,7 @@ def main() -> int:
         if args.command in ("create", "bind"):
             if args.command == "create":
                 api = load_config(args.config)
-                params: dict[str, Any] = {"project_id": args.project_id, "name": args.name}
-                if args.column_id:
-                    params["column_id"] = args.column_id
-                if args.content_file:
-                    params["content"] = markdown_to_task_html(args.content_file.read_text(encoding="utf-8"))
+                params = build_create_task_params(args)
                 task = request_api(api, "POST", "/api/project/task/add", params)
                 task_id = int(task["id"])
             else:

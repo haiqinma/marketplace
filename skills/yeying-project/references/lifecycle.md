@@ -14,7 +14,7 @@
 | `approval` | 负责人确认、确认人和可追溯引用 | 方案确认已记录 |
 | `implementation` | 修改文件、关键决策、实现过程 | 已完成获批方案的实现 |
 | 文档收口记录（`documentation`） | 检查/更新的 `docs`、`books/yeying` 路径、无需更新理由、跨项目影响 | 在 `implementation` 完成后、`verification` 前记录；PlantUML 仅在复杂流程需要时记录 |
-| `verification` | 命令、结果、时间、环境、失败信息 | `passed=true`，且覆盖任务验收标准和文档收口 |
+| `verification` | 命令、结果、时间、环境、失败信息、测试用例位置 | `passed=true`，覆盖验收标准和文档收口；任务级测试用例遵守 [testing.md](testing.md)，E2E 用例放在共享 `tester` 仓库 |
 | `delivery` | 分支、commit SHA、仓库、PR URL/编号 | PR 已创建或复用，状态和 CI 信息已记录 |
 | `audit` | 执行归档、脱敏状态、缺失项、审计索引 | 归档已发布到任务附件并可复用 |
 | `completed` | 最终结果、合并状态或明确阻塞 | PR、验证和归档记录完整 |
@@ -35,8 +35,11 @@ python3 scripts/project_lifecycle.py bind \
 ```bash
 python3 scripts/project_lifecycle.py create \
   --project-id 8 --name "实现某功能" --workdir /path/to/repository \
+  --times '["2026-10-24 09:00","2026-10-25 18:00"]' \
   --content-file /tmp/request.md
 ```
+
+使用 AK/SK 创建任务时，`--owner` 默认省略：Project 服务端从已认证令牌取得签发该凭证的用户，并将其设为任务负责人。只有改派给其他 Project 成员时才显式传 `--owner`；只有明确创建待认领 backlog 时才传 `--allow-unassigned`，客户端会用显式空 `owner` 区分“待认领”和“采用凭证用户默认值”。生命周期 `create` 仍要求明确的开始/结束时间，缺失时直接失败；只有明确需要无计划任务时才使用 `--allow-unscheduled`。服务端默认负责人能力必须先于依赖它的 skill 客户端部署。
 
 状态文件默认是工作区下的 `.project-lifecycle-<task-id>.json`，任务绑定文件是 `.project-task-<task-id>.json`，例如任务 123 对应 `.project-lifecycle-123.json` 和 `.project-task-123.json`。不同任务使用不同文件，因此可以在同一工作区并行执行。它们都不得写入 AK/SK，也不应提交到代码仓库；同时忽略 `.project-execution-*.json` 和 `.project-execution-*/`。
 

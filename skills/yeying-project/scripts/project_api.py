@@ -267,7 +267,9 @@ def build_parser() -> argparse.ArgumentParser:
     task_create_content.add_argument("--content", help="Markdown 格式的任务详情")
     task_create_content.add_argument("--content-file", type=Path, help="包含任务详情的 UTF-8 文件")
     task_create.add_argument("--content-format", choices=("markdown", "html"), default="markdown")
-    task_create.add_argument("--owner", type=int, help="负责人用户 ID")
+    task_create_owner = task_create.add_mutually_exclusive_group()
+    task_create_owner.add_argument("--owner", type=int, help="负责人用户 ID；留空时由服务端使用当前 AK/SK 所属用户")
+    task_create_owner.add_argument("--unassigned", action="store_true", help="显式创建未领取任务")
     task_create.add_argument("--times", help="JSON 数组或对象")
     task_create.add_argument("--subtasks", help="JSON 子任务数组")
     task_create.add_argument("--top", action="store_true", help="将任务排到列表最前面")
@@ -383,7 +385,9 @@ def main() -> int:
                 content = args.content_file.read_text(encoding="utf-8")
             if content is not None:
                 params["content"] = content if args.content_format == "html" else markdown_to_task_html(content)
-            if args.owner is not None:
+            if args.unassigned:
+                params["owner"] = []
+            elif args.owner is not None:
                 params["owner"] = args.owner
             if args.top:
                 params["top"] = 1

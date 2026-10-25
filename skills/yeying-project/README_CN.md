@@ -24,6 +24,9 @@
 url = "https://project.example.com"
 access_key = "yyak_..."
 secret_key = "<只显示一次的 Secret Key>"
+
+[tester]
+path = "../tester" # 可选；相对当前产品项目根目录
 ```
 
 配置文件选择优先级从高到低为：
@@ -39,6 +42,9 @@ secret_key = "<只显示一次的 Secret Key>"
 - `url`：Project 服务根地址，不包含 API 路径后缀。从浏览器打开的 Project 地址或部署管理员处获取。
 - `access_key`：Project 自动化访问令牌的 Access Key。
 - `secret_key`：与 Access Key 匹配的 Secret Key，仅在创建或轮换时显示一次。
+- `[tester].path`：共享 `tester` 测试库的路径，可选；相对路径以当前产品项目根目录解析。未配置时默认使用同级目录 `<产品项目父目录>/tester`。该规则适用于社区所有项目。
+
+`tester` 是社区共享的 Playwright/Chromium E2E 测试库。跨项目用户流程和 E2E 用例必须放在 `tester`，不得新建在产品项目仓库中；产品内部单元测试仍可留在产品自己的原生测试套件。Project API 客户端只读取 `[project]`，`[tester]` 由 Agent 工作流程使用。
 
 #### 获取 Project AK/SK
 

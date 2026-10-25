@@ -27,10 +27,14 @@ The script resolves configuration in this order:
 
 The configuration file is TOML:
 
+```toml
 [project]
 url = "http://127.0.0.1:8080"
 access_key = "your-project-access-key"
 secret_key = "your-project-secret-key"
+
+[tester]
+path = "../tester" # optional; relative to the active project root
 ```
 
 Use a custom file with:
@@ -39,7 +43,9 @@ Use a custom file with:
 python3 scripts/project_api.py --config /path/to/project.toml projects
 ```
 
-Create the default file at `~/.yeying/skills/project/config.toml`, or point `YEYING_PROJECT_CONFIG` to another local TOML file. Environment variables `YEYING_PROJECT_URL`, `YEYING_PROJECT_AK`, and `YEYING_PROJECT_SK` take precedence over the corresponding TOML fields. Keep this file outside Git and restrict its permissions, for example `chmod 600 ~/.yeying/skills/project/config.toml`.
+Create the default file at `~/.yeying/skills/project/config.toml`, or point `YEYING_PROJECT_CONFIG` to another local TOML file. Environment variables `YEYING_PROJECT_URL`, `YEYING_PROJECT_AK`, and `YEYING_PROJECT_SK` take precedence over the corresponding TOML fields. For AK/SK task creation, Project resolves the credential owner from the authenticated token and uses that user as the default task owner when `owner` is omitted; do not duplicate that identity in local configuration. Keep this file outside Git and restrict its permissions, for example `chmod 600 ~/.yeying/skills/project/config.toml`.
+
+For new E2E or user-workflow test cases across all YeYing community projects, use the shared Playwright `tester` repository. Its path can be set with `[tester].path` in the selected config; relative paths resolve from the active product project's root. If unset, use the sibling path `<product-project-parent>/tester`. The Project API client only reads `[project]`; `[tester]` is consumed by this workflow. Never add E2E cases to a community project repository. Product-internal unit tests may remain in the product's native test suite.
 
 Legacy JSON files are not part of the shared skill configuration contract.
 
@@ -52,7 +58,7 @@ Available commands:
 ```bash
 python3 scripts/project_api.py projects
 python3 scripts/project_api.py tasks --project-id 8
-python3 scripts/project_api.py task-create --project-id 8 --name "实现某功能" --content-file /tmp/request.md
+python3 scripts/project_api.py task-create --project-id 8 --name "实现某功能" --times '["2026-10-24 09:00","2026-10-25 18:00"]' --content-file /tmp/request.md
 python3 scripts/project_api.py task --task-id 123
 python3 scripts/project_api.py comment --task-id 123 --model "<model-id>" --content "已完成实现和验证。"
 python3 scripts/project_api.py comment --task-id 123 --model "<model-id>" --content-file /tmp/project-update.md
@@ -65,6 +71,7 @@ python3 scripts/project_api.py file-info --file-id 456
 python3 scripts/project_api.py download --file-id 456 --output /tmp/document.pdf
 
 # lifecycle state and gates
+python3 scripts/project_lifecycle.py create --project-id 8 --name "实现某功能" --workdir /path/to/repository --times '["2026-10-24 09:00","2026-10-25 18:00"]' --content-file /tmp/request.md --source-tool codex --model "<model-id>"
 python3 scripts/project_lifecycle.py bind --project-id 8 --task-id 123 --workdir /path/to/repository --source-tool codex --model "<model-id>"
 python3 scripts/project_lifecycle.py record --state /path/to/repository/.project-lifecycle-123.json --kind analysis --file /tmp/analysis.json --publish
 python3 scripts/project_lifecycle.py record --state /path/to/repository/.project-lifecycle-123.json --kind documentation --file /tmp/documentation.json --publish
@@ -132,12 +139,12 @@ All successful commands print JSON to stdout. Failures print a concise error to 
 ## Task Workflow
 
 1. Resolve or create the task. If the user gives a task ID, call `task`; otherwise list `projects` and `tasks`, or use `task-create` when the request has no existing task.
-2. Bind the repository with `project_lifecycle.py bind` or create-and-bind it with `project_lifecycle.py create`; keep `.project-task-*.json`, `.project-lifecycle-*.json`, `.project-execution-*.json`, and `.project-execution-*/` out of Git.
+2. Bind the repository with `project_lifecycle.py bind` or create-and-bind it with `project_lifecycle.py create`. For AK/SK requests, omitting `--owner` makes Project assign the task to the user who issued the current credential; use `--owner` only to assign another Project member, and `--allow-unassigned` only for an intentionally unclaimed backlog task. Concrete development tasks must pass `--times '["start","end"]'`; `create` fails closed when the plan window is missing unless `--allow-unscheduled` is explicit. Deploy the Project server support before a client version that relies on this default-owner behavior. Keep `.project-task-*.json`, `.project-lifecycle-*.json`, `.project-execution-*.json`, and `.project-execution-*/` out of Git.
 3. Read the task title, description, content, members, tags, and recent discussion. Record the analysis and feasible solution, including scope, non-goals, risks, acceptance criteria, and test plan.
 4. Obtain explicit solution approval and advance the lifecycle gate before changing code. A verbal or hidden approval that has no traceable reference does not satisfy the gate.
 5. Inspect the local repository and perform the requested work using its own instructions and quality gates. Keep structured implementation records in the lifecycle state.
 6. Before verification, inspect and update affected local `docs` and `books/yeying` documents. Record the paths, update status, no-change reason when applicable, and cross-project impact as a `documentation` record. PlantUML is optional and should be used only when it makes a complex flow easier to read.
-7. Run verification and record `passed=true` only when the acceptance criteria and documentation closeout are covered. Use `github-api-push` for GitHub push/PR operations, then record the exact repository, branch, commit SHA, PR URL/number, CI and review state in a `pull_request` record.
+7. When a task requires E2E or user-workflow tests, follow [references/testing.md](references/testing.md) and add them to the shared `tester` repository; do not add E2E cases to the product repo. Keep implementation-internal unit tests in the product's native suite when appropriate. Run verification and record `passed=true` only when the acceptance criteria, test results, and documentation closeout are covered. Use `github-api-push` for GitHub push/PR operations, then record the exact repository, branch, commit SHA, PR URL/number, CI and review state in a `pull_request` record.
 8. Capture and publish the available AI execution history with the same task and `executionId`; associate the lifecycle snapshot with `project_execution_archive.py finalize`.
 9. Advance to `completed` only after the PR, verification and audit archive are all present. Post a concise durable result comment; do not post routine tool narration.
 10. Keep the user's chat response aligned with what was written back to Project.

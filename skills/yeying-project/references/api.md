@@ -35,6 +35,8 @@ Sort GET query parameters by name and encode with RFC 3986 rules. Array paramete
 
 The server treats the token as its owner's signed authentication method and reuses the same business permissions as the Web API. It additionally verifies token project bindings, current project membership, active user state, and task visibility.
 
+For `POST /api/project/task/add`, an AK/SK-authenticated request that omits the `owner` key defaults the task owner to the user who issued the current automation token. An explicitly supplied owner is preserved and validated as a Project member. An explicit empty owner array means intentionally unassigned and is not replaced by the token owner. This default applies only when the request carries an authenticated automation token; ordinary Web requests keep their existing behavior. Deploy this server behavior before releasing a `yeying-project` client that omits `owner` by default.
+
 `model_name` is provenance metadata for the task discussion. Send only the real active model ID exposed by the host; never infer it from `source_tool`. When the host does not expose a model, omit `model_name` and retain `model_missing_reason` in the execution archive. Internal deployment aliases should follow the same redaction and Project access boundary as other execution metadata.
 
 ## File Cabinet Endpoints
