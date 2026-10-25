@@ -31,6 +31,7 @@ class Settings:
     base_url: str
     access_key: str
     secret_key: str
+    default_owner_id: int | None
     config_path: Path
     source: str
 
@@ -56,7 +57,7 @@ def _fallback_toml(raw: bytes) -> dict:
             parsed: object = ast.literal_eval(value)
         except (SyntaxError, ValueError) as exc:
             raise ValueError(f"invalid TOML value at line {line_number}") from exc
-        if not isinstance(parsed, str):
+        if not isinstance(parsed, (str, int)) or isinstance(parsed, bool):
             raise ValueError(f"unsupported TOML value at line {line_number}")
         result[section][key] = parsed
     return result
@@ -98,12 +99,23 @@ def load(explicit_path: str | Path | None = None) -> Settings:
     env_url = os.environ.get("YEYING_PROJECT_URL", "").strip()
     env_access_key = os.environ.get("YEYING_PROJECT_AK", "").strip()
     env_secret_key = os.environ.get("YEYING_PROJECT_SK", "").strip()
+    env_default_owner_id = os.environ.get("YEYING_PROJECT_DEFAULT_OWNER_ID", "").strip()
     file_url = str(section.get("url", "")).strip()
     file_access_key = str(section.get("access_key", "")).strip()
     file_secret_key = str(section.get("secret_key", "")).strip()
+    file_default_owner_id = str(section.get("default_owner_id", "")).strip()
     base_url = (env_url or file_url).rstrip("/")
     access_key = env_access_key or file_access_key
     secret_key = env_secret_key or file_secret_key
+    raw_default_owner_id = env_default_owner_id or file_default_owner_id
+    default_owner_id = None
+    if raw_default_owner_id:
+        try:
+            default_owner_id = int(raw_default_owner_id)
+        except ValueError as exc:
+            raise ConfigError("Project config default_owner_id must be a positive integer") from exc
+        if default_owner_id <= 0:
+            raise ConfigError("Project config default_owner_id must be a positive integer")
     missing = [name for name, value in (("url", base_url), ("access_key", access_key), ("secret_key", secret_key)) if not value]
     if missing:
         raise ConfigError(
@@ -111,4 +123,4 @@ def load(explicit_path: str | Path | None = None) -> Settings:
             + "; use --config, YEYING_PROJECT_CONFIG, or ~/.yeying/skills/project/config.toml"
         )
     source = "env" if env_url or env_access_key or env_secret_key else "file"
-    return Settings(base_url, access_key, secret_key, path, source)
+    return Settings(base_url, access_key, secret_key, default_owner_id, path, source)

@@ -15,13 +15,14 @@ class ProjectConfigTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp) / "config.toml"
             path.write_text(
-                '[project]\nurl = "http://localhost:8080"\naccess_key = "ak"\nsecret_key = "sk"\n',
+                '[project]\nurl = "http://localhost:8080"\naccess_key = "ak"\nsecret_key = "sk"\ndefault_owner_id = 7\n',
                 encoding="utf-8",
             )
             path.chmod(0o600)
             settings = load(path)
             self.assertEqual(settings.base_url, "http://localhost:8080")
             self.assertEqual(settings.access_key, "ak")
+            self.assertEqual(settings.default_owner_id, 7)
             self.assertEqual(settings.source, "file")
 
     def test_toml_config_allows_tester_workflow_section(self):
@@ -48,11 +49,13 @@ class ProjectConfigTest(unittest.TestCase):
                 "YEYING_PROJECT_URL": "http://env",
                 "YEYING_PROJECT_AK": "env-ak",
                 "YEYING_PROJECT_SK": "env-sk",
+                "YEYING_PROJECT_DEFAULT_OWNER_ID": "9",
             }, clear=False):
                 settings = load(path)
             self.assertEqual(settings.base_url, "http://env")
             self.assertEqual(settings.access_key, "env-ak")
             self.assertEqual(settings.secret_key, "env-sk")
+            self.assertEqual(settings.default_owner_id, 9)
             self.assertEqual(settings.source, "env")
 
     def test_secret_config_requires_private_permissions(self):
@@ -61,6 +64,17 @@ class ProjectConfigTest(unittest.TestCase):
             path.write_text('[project]\nsecret_key = "sk"\n', encoding="utf-8")
             path.chmod(0o644)
             with self.assertRaises(ConfigError):
+                load(path)
+
+    def test_default_owner_id_must_be_positive_integer(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "config.toml"
+            path.write_text(
+                '[project]\nurl = "http://localhost:8080"\naccess_key = "ak"\nsecret_key = "sk"\ndefault_owner_id = 0\n',
+                encoding="utf-8",
+            )
+            path.chmod(0o600)
+            with self.assertRaisesRegex(ConfigError, "positive integer"):
                 load(path)
 
 
