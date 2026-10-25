@@ -32,7 +32,6 @@ The configuration file is TOML:
 url = "http://127.0.0.1:8080"
 access_key = "your-project-access-key"
 secret_key = "your-project-secret-key"
-default_owner_id = 1 # optional Project user ID for newly created tasks
 
 [tester]
 path = "../tester" # optional; relative to the active project root
@@ -44,7 +43,7 @@ Use a custom file with:
 python3 scripts/project_api.py --config /path/to/project.toml projects
 ```
 
-Create the default file at `~/.yeying/skills/project/config.toml`, or point `YEYING_PROJECT_CONFIG` to another local TOML file. Environment variables `YEYING_PROJECT_URL`, `YEYING_PROJECT_AK`, `YEYING_PROJECT_SK`, and `YEYING_PROJECT_DEFAULT_OWNER_ID` take precedence over the corresponding TOML fields. `default_owner_id` is task metadata, not part of AK/SK authentication; it must identify a member of the target Project. Keep this file outside Git and restrict its permissions, for example `chmod 600 ~/.yeying/skills/project/config.toml`.
+Create the default file at `~/.yeying/skills/project/config.toml`, or point `YEYING_PROJECT_CONFIG` to another local TOML file. Environment variables `YEYING_PROJECT_URL`, `YEYING_PROJECT_AK`, and `YEYING_PROJECT_SK` take precedence over the corresponding TOML fields. For AK/SK task creation, Project resolves the credential owner from the authenticated token and uses that user as the default task owner when `owner` is omitted; do not duplicate that identity in local configuration. Keep this file outside Git and restrict its permissions, for example `chmod 600 ~/.yeying/skills/project/config.toml`.
 
 For new E2E or user-workflow test cases across all YeYing community projects, use the shared Playwright `tester` repository. Its path can be set with `[tester].path` in the selected config; relative paths resolve from the active product project's root. If unset, use the sibling path `<product-project-parent>/tester`. The Project API client only reads `[project]`; `[tester]` is consumed by this workflow. Never add E2E cases to a community project repository. Product-internal unit tests may remain in the product's native test suite.
 
@@ -59,7 +58,7 @@ Available commands:
 ```bash
 python3 scripts/project_api.py projects
 python3 scripts/project_api.py tasks --project-id 8
-python3 scripts/project_api.py task-create --project-id 8 --name "实现某功能" --owner 1 --times '["2026-10-24 09:00","2026-10-25 18:00"]' --content-file /tmp/request.md
+python3 scripts/project_api.py task-create --project-id 8 --name "实现某功能" --times '["2026-10-24 09:00","2026-10-25 18:00"]' --content-file /tmp/request.md
 python3 scripts/project_api.py task --task-id 123
 python3 scripts/project_api.py comment --task-id 123 --model "<model-id>" --content "已完成实现和验证。"
 python3 scripts/project_api.py comment --task-id 123 --model "<model-id>" --content-file /tmp/project-update.md
@@ -72,7 +71,7 @@ python3 scripts/project_api.py file-info --file-id 456
 python3 scripts/project_api.py download --file-id 456 --output /tmp/document.pdf
 
 # lifecycle state and gates
-python3 scripts/project_lifecycle.py create --project-id 8 --name "实现某功能" --workdir /path/to/repository --owner 1 --times '["2026-10-24 09:00","2026-10-25 18:00"]' --content-file /tmp/request.md --source-tool codex --model "<model-id>"
+python3 scripts/project_lifecycle.py create --project-id 8 --name "实现某功能" --workdir /path/to/repository --times '["2026-10-24 09:00","2026-10-25 18:00"]' --content-file /tmp/request.md --source-tool codex --model "<model-id>"
 python3 scripts/project_lifecycle.py bind --project-id 8 --task-id 123 --workdir /path/to/repository --source-tool codex --model "<model-id>"
 python3 scripts/project_lifecycle.py record --state /path/to/repository/.project-lifecycle-123.json --kind analysis --file /tmp/analysis.json --publish
 python3 scripts/project_lifecycle.py record --state /path/to/repository/.project-lifecycle-123.json --kind documentation --file /tmp/documentation.json --publish
@@ -140,7 +139,7 @@ All successful commands print JSON to stdout. Failures print a concise error to 
 ## Task Workflow
 
 1. Resolve or create the task. If the user gives a task ID, call `task`; otherwise list `projects` and `tasks`, or use `task-create` when the request has no existing task.
-2. Bind the repository with `project_lifecycle.py bind` or create-and-bind it with `project_lifecycle.py create`. Concrete development tasks must have a responsible owner and explicit plan window at creation time: pass `--owner` or configure `[project].default_owner_id`, and pass `--times '["start","end"]'`. `create` fails closed when either is missing; use `--allow-unassigned` or `--allow-unscheduled` only when an intentionally unclaimed backlog task or unscheduled task is requested. Keep `.project-task-*.json`, `.project-lifecycle-*.json`, `.project-execution-*.json`, and `.project-execution-*/` out of Git.
+2. Bind the repository with `project_lifecycle.py bind` or create-and-bind it with `project_lifecycle.py create`. For AK/SK requests, omitting `--owner` makes Project assign the task to the user who issued the current credential; use `--owner` only to assign another Project member, and `--allow-unassigned` only for an intentionally unclaimed backlog task. Concrete development tasks must pass `--times '["start","end"]'`; `create` fails closed when the plan window is missing unless `--allow-unscheduled` is explicit. Deploy the Project server support before a client version that relies on this default-owner behavior. Keep `.project-task-*.json`, `.project-lifecycle-*.json`, `.project-execution-*.json`, and `.project-execution-*/` out of Git.
 3. Read the task title, description, content, members, tags, and recent discussion. Record the analysis and feasible solution, including scope, non-goals, risks, acceptance criteria, and test plan.
 4. Obtain explicit solution approval and advance the lifecycle gate before changing code. A verbal or hidden approval that has no traceable reference does not satisfy the gate.
 5. Inspect the local repository and perform the requested work using its own instructions and quality gates. Keep structured implementation records in the lifecycle state.

@@ -107,21 +107,16 @@ def parse_task_times(value: str) -> list[str]:
     return [item.strip() for item in times]
 
 
-def build_create_task_params(args: argparse.Namespace, config: dict[str, Any]) -> dict[str, Any]:
+def build_create_task_params(args: argparse.Namespace) -> dict[str, Any]:
     params: dict[str, Any] = {"project_id": args.project_id, "name": args.name}
     if args.column_id:
         params["column_id"] = args.column_id
     if args.content_file:
         params["content"] = markdown_to_task_html(args.content_file.read_text(encoding="utf-8"))
-    owner = None if args.allow_unassigned else (args.owner if args.owner is not None else config.get("default_owner_id"))
-    if owner is None:
-        if not args.allow_unassigned:
-            raise ProjectApiError(
-                "生命周期任务必须指定负责人：使用 --owner、配置 [project].default_owner_id，"
-                "或仅在确需待认领任务时传 --allow-unassigned"
-            )
-    else:
-        owner = int(owner)
+    if args.allow_unassigned:
+        params["owner"] = []
+    elif args.owner is not None:
+        owner = int(args.owner)
         if owner <= 0:
             raise ProjectApiError("负责人用户 ID 必须是正整数")
         params["owner"] = owner
@@ -383,7 +378,7 @@ def build_parser() -> argparse.ArgumentParser:
     create.add_argument("--column-id")
     create.add_argument("--content-file", type=Path)
     create_owner = create.add_mutually_exclusive_group()
-    create_owner.add_argument("--owner", type=int, help="负责人用户 ID；未提供时使用配置 default_owner_id")
+    create_owner.add_argument("--owner", type=int, help="负责人用户 ID；未提供时由服务端使用当前 AK/SK 所属用户")
     create_owner.add_argument("--allow-unassigned", action="store_true", help="允许创建没有负责人的待认领任务")
     create_schedule = create.add_mutually_exclusive_group()
     create_schedule.add_argument("--times", help="计划时间 JSON 数组：[开始时间, 结束时间]")
@@ -439,7 +434,7 @@ def main() -> int:
         if args.command in ("create", "bind"):
             if args.command == "create":
                 api = load_config(args.config)
-                params = build_create_task_params(args, api)
+                params = build_create_task_params(args)
                 task = request_api(api, "POST", "/api/project/task/add", params)
                 task_id = int(task["id"])
             else:

@@ -212,7 +212,7 @@ class LifecycleTest(unittest.TestCase):
                 with self.assertRaises(lifecycle.ProjectApiError):
                     lifecycle.initialize(8, 123, root, lifecycle.default_state_path(root, 123))
 
-    def test_create_task_params_use_config_owner_and_explicit_times(self):
+    def test_create_task_params_rely_on_server_token_owner_and_use_explicit_times(self):
         args = Namespace(
             project_id=8,
             name="task",
@@ -223,11 +223,11 @@ class LifecycleTest(unittest.TestCase):
             allow_unassigned=False,
             allow_unscheduled=False,
         )
-        params = lifecycle.build_create_task_params(args, {"default_owner_id": 7})
-        self.assertEqual(params["owner"], 7)
+        params = lifecycle.build_create_task_params(args)
+        self.assertNotIn("owner", params)
         self.assertEqual(params["times"], ["2026-10-24 09:00", "2026-10-25 18:00"])
 
-    def test_create_task_params_fail_closed_without_owner_or_times(self):
+    def test_create_task_params_fail_closed_without_times(self):
         args = Namespace(
             project_id=8,
             name="task",
@@ -238,13 +238,10 @@ class LifecycleTest(unittest.TestCase):
             allow_unassigned=False,
             allow_unscheduled=False,
         )
-        with self.assertRaisesRegex(lifecycle.ProjectApiError, "必须指定负责人"):
-            lifecycle.build_create_task_params(args, {})
-        args.allow_unassigned = True
         with self.assertRaisesRegex(lifecycle.ProjectApiError, "必须指定计划时间"):
-            lifecycle.build_create_task_params(args, {})
+            lifecycle.build_create_task_params(args)
 
-    def test_create_task_params_allow_unassigned_overrides_config_owner(self):
+    def test_create_task_params_allow_unassigned_sends_explicit_empty_owner(self):
         args = Namespace(
             project_id=8,
             name="task",
@@ -255,8 +252,22 @@ class LifecycleTest(unittest.TestCase):
             allow_unassigned=True,
             allow_unscheduled=False,
         )
-        params = lifecycle.build_create_task_params(args, {"default_owner_id": 7})
-        self.assertNotIn("owner", params)
+        params = lifecycle.build_create_task_params(args)
+        self.assertEqual(params["owner"], [])
+
+    def test_create_task_params_preserve_explicit_owner(self):
+        args = Namespace(
+            project_id=8,
+            name="task",
+            column_id=None,
+            content_file=None,
+            owner=9,
+            times='["2026-10-24 09:00", "2026-10-25 18:00"]',
+            allow_unassigned=False,
+            allow_unscheduled=False,
+        )
+        params = lifecycle.build_create_task_params(args)
+        self.assertEqual(params["owner"], 9)
 
     def test_parse_task_times_rejects_invalid_range(self):
         with self.assertRaisesRegex(lifecycle.ProjectApiError, "结束时间必须晚于开始时间"):

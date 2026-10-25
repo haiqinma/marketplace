@@ -35,12 +35,11 @@ python3 scripts/project_lifecycle.py bind \
 ```bash
 python3 scripts/project_lifecycle.py create \
   --project-id 8 --name "实现某功能" --workdir /path/to/repository \
-  --owner 1 \
   --times '["2026-10-24 09:00","2026-10-25 18:00"]' \
   --content-file /tmp/request.md
 ```
 
-`--owner` 可省略并由 `[project].default_owner_id` 或 `YEYING_PROJECT_DEFAULT_OWNER_ID` 提供。负责人必须是目标 Project 成员；AK/SK 只负责鉴权，不携带默认负责人信息。生命周期 `create` 要求研发任务在创建时同时具备负责人和明确的开始/结束时间，缺失时直接失败，避免任务完成后因“未领取”而无法切换状态。只有明确需要创建待认领 backlog 或无计划任务时，才分别使用 `--allow-unassigned` 或 `--allow-unscheduled`。
+使用 AK/SK 创建任务时，`--owner` 默认省略：Project 服务端从已认证令牌取得签发该凭证的用户，并将其设为任务负责人。只有改派给其他 Project 成员时才显式传 `--owner`；只有明确创建待认领 backlog 时才传 `--allow-unassigned`，客户端会用显式空 `owner` 区分“待认领”和“采用凭证用户默认值”。生命周期 `create` 仍要求明确的开始/结束时间，缺失时直接失败；只有明确需要无计划任务时才使用 `--allow-unscheduled`。服务端默认负责人能力必须先于依赖它的 skill 客户端部署。
 
 状态文件默认是工作区下的 `.project-lifecycle-<task-id>.json`，任务绑定文件是 `.project-task-<task-id>.json`，例如任务 123 对应 `.project-lifecycle-123.json` 和 `.project-task-123.json`。不同任务使用不同文件，因此可以在同一工作区并行执行。它们都不得写入 AK/SK，也不应提交到代码仓库；同时忽略 `.project-execution-*.json` 和 `.project-execution-*/`。
 
