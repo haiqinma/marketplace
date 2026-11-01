@@ -21,7 +21,7 @@ from project_agent_context import (
 )
 from project_api import ProjectApiError, ensure_task_dialog_id, load_config, markdown_to_task_html, request_api
 from project_execution_archive import redact
-from project_task_binding import task_marker_name
+from project_task_binding import lifecycle_state_path, task_marker_path
 
 
 SCHEMA = "yeying.project.development-lifecycle.v1"
@@ -81,7 +81,7 @@ def load_state(path: Path) -> dict[str, Any]:
 
 
 def default_state_path(workdir: Path, task_id: int) -> Path:
-    return workdir / f".project-lifecycle-{task_id}.json"
+    return lifecycle_state_path(workdir, task_id)
 
 
 def parse_task_times(value: str) -> list[str]:
@@ -145,7 +145,7 @@ def initialize(
         raise ProjectApiError(f"任务 {task_id} 属于 Project {task_project_id}，不是 {project_id}")
     workdir.mkdir(parents=True, exist_ok=True)
     marker = {"project_id": project_id, "task_id": task_id}
-    marker_path = workdir / task_marker_name(task_id)
+    marker_path = task_marker_path(workdir, task_id)
     if marker_path.is_file():
         existing_marker = read_json(marker_path)
         if existing_marker != marker:
@@ -374,7 +374,7 @@ def build_parser() -> argparse.ArgumentParser:
     create.add_argument("--project-id", type=int, required=True)
     create.add_argument("--name", required=True)
     create.add_argument("--workdir", type=Path, required=True)
-    create.add_argument("--state", type=Path, help="默认写入工作区 .project-lifecycle-<task-id>.json")
+    create.add_argument("--state", type=Path, help="默认写入工作区 .project/lifecycle-<task-id>.json")
     create.add_argument("--column-id")
     create.add_argument("--content-file", type=Path)
     create_owner = create.add_mutually_exclusive_group()
@@ -390,7 +390,7 @@ def build_parser() -> argparse.ArgumentParser:
     bind.add_argument("--project-id", type=int, required=True)
     bind.add_argument("--task-id", type=int, required=True)
     bind.add_argument("--workdir", type=Path, required=True)
-    bind.add_argument("--state", type=Path, help="默认写入工作区 .project-lifecycle-<task-id>.json")
+    bind.add_argument("--state", type=Path, help="默认写入工作区 .project/lifecycle-<task-id>.json")
     bind.add_argument("--config", help="Project TOML 配置文件")
     add_agent_arguments(bind, include_source_tool=True)
 

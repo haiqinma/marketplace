@@ -41,17 +41,17 @@ python3 scripts/project_lifecycle.py create \
 
 使用 AK/SK 创建任务时，`--owner` 默认省略：Project 服务端从已认证令牌取得签发该凭证的用户，并将其设为任务负责人。只有改派给其他 Project 成员时才显式传 `--owner`；只有明确创建待认领 backlog 时才传 `--allow-unassigned`，客户端会用显式空 `owner` 区分“待认领”和“采用凭证用户默认值”。生命周期 `create` 仍要求明确的开始/结束时间，缺失时直接失败；只有明确需要无计划任务时才使用 `--allow-unscheduled`。服务端默认负责人能力必须先于依赖它的 skill 客户端部署。
 
-状态文件默认是工作区下的 `.project-lifecycle-<task-id>.json`，任务绑定文件是 `.project-task-<task-id>.json`，例如任务 123 对应 `.project-lifecycle-123.json` 和 `.project-task-123.json`。不同任务使用不同文件，因此可以在同一工作区并行执行。它们都不得写入 AK/SK，也不应提交到代码仓库；同时忽略 `.project-execution-*.json` 和 `.project-execution-*/`。
+新状态文件统一写入工作区根目录的 `.project/`：任务绑定为 `task-<task-id>.json`，生命周期为 `lifecycle-<task-id>.json`，执行状态为 `execution-<task-id>.json`，执行归档目录为 `execution-<task-id>/`。例如任务 123 对应 `.project/task-123.json` 和 `.project/lifecycle-123.json`。不同任务使用不同文件，因此可以在同一工作区并行执行。状态文件不得写入 AK/SK，Git 应忽略根目录下的 `/.project/`。旧工作区根目录的 `.project-task-<task-id>.json`、`.project-lifecycle-<task-id>.json` 和 `.project-execution-*` 路径仍可读取；若旧状态已存在，工具会沿用原路径避免创建分叉。完成一次性迁移到 `.project/` 后，后续状态会统一写入新目录。
 
 每种产物使用一个 JSON 对象记录，并通过 SHA-256 幂等替换同一类型的旧版本：
 
 ```bash
-python3 scripts/project_lifecycle.py record --state .project-lifecycle-123.json \
+python3 scripts/project_lifecycle.py record --state .project/lifecycle-123.json \
   --kind analysis --file /tmp/analysis.json --publish \
   --config ~/.yeying/skills/project/config.toml
-python3 scripts/project_lifecycle.py record --state .project-lifecycle-123.json \
+python3 scripts/project_lifecycle.py record --state .project/lifecycle-123.json \
   --kind solution --file /tmp/solution.json --publish
-python3 scripts/project_lifecycle.py record --state .project-lifecycle-123.json \
+python3 scripts/project_lifecycle.py record --state .project/lifecycle-123.json \
   --kind documentation --file /tmp/documentation.json --publish
 ```
 
@@ -68,21 +68,21 @@ python3 scripts/project_lifecycle.py record --state .project-lifecycle-123.json 
 
 ```bash
 python3 scripts/project_lifecycle.py approve \
-  --state .project-lifecycle-123.json --by "user-id-or-name" \
+  --state .project/lifecycle-123.json --by "user-id-or-name" \
   --reference "Project 评论 ID 或会议记录链接"
 ```
 
 阶段推进由门禁检查完成：
 
 ```bash
-python3 scripts/project_lifecycle.py advance --state .project-lifecycle-123.json --to analysis
-python3 scripts/project_lifecycle.py advance --state .project-lifecycle-123.json --to solution
-python3 scripts/project_lifecycle.py advance --state .project-lifecycle-123.json --to approval
-python3 scripts/project_lifecycle.py advance --state .project-lifecycle-123.json --to implementation
-python3 scripts/project_lifecycle.py advance --state .project-lifecycle-123.json --to verification
-python3 scripts/project_lifecycle.py advance --state .project-lifecycle-123.json --to delivery
-python3 scripts/project_lifecycle.py advance --state .project-lifecycle-123.json --to audit
-python3 scripts/project_lifecycle.py advance --state .project-lifecycle-123.json --to completed
+python3 scripts/project_lifecycle.py advance --state .project/lifecycle-123.json --to analysis
+python3 scripts/project_lifecycle.py advance --state .project/lifecycle-123.json --to solution
+python3 scripts/project_lifecycle.py advance --state .project/lifecycle-123.json --to approval
+python3 scripts/project_lifecycle.py advance --state .project/lifecycle-123.json --to implementation
+python3 scripts/project_lifecycle.py advance --state .project/lifecycle-123.json --to verification
+python3 scripts/project_lifecycle.py advance --state .project/lifecycle-123.json --to delivery
+python3 scripts/project_lifecycle.py advance --state .project/lifecycle-123.json --to audit
+python3 scripts/project_lifecycle.py advance --state .project/lifecycle-123.json --to completed
 ```
 
 `github-api-push` 负责把本地 commit 推到 GitHub、查找或创建 PR；完成后将同一组 `repository`、`branch`、`commit_sha` 和 `url` 写入 `pull_request` 产物。Project Skill 不复制 GitHub API，也不把“已提交本地 commit”误报为“已创建 PR”。
@@ -132,9 +132,9 @@ stop
 ```bash
 python3 scripts/project_execution_archive.py start \
   --project-id 8 --task-id 123 --source-tool codex --model "<model-id>" \
-  --state /path/to/repository/.project-execution-123.json \
-  --output-dir /path/to/repository/.project-execution-123 \
-  --lifecycle-file /path/to/repository/.project-lifecycle-123.json
+  --state /path/to/repository/.project/execution-123.json \
+  --output-dir /path/to/repository/.project/execution-123 \
+  --lifecycle-file /path/to/repository/.project/lifecycle-123.json
 ```
 
 `finalize` 会把生命周期快照、仓库/commit/PR/验证元数据、结构化 Agent/模型上下文和会话记录写入 `transcript.json`、`transcript.md` 与 `manifest.json`。模型 ID 必须来自宿主明确输入或公开事件，不得根据执行工具猜测；拿不到时保留 `model_missing_reason`。显式模型是 `primary`，事件中的其他模型是 `participant`，finalize 后模型集合被冻结。归档只包含宿主实际暴露的公开事件；隐藏系统提示词、隐藏推理和未暴露的内部工具轨迹必须标记在 `missing` 中，不得猜测补写。
@@ -143,8 +143,8 @@ python3 scripts/project_execution_archive.py start \
 
 ```bash
 python3 scripts/project_lifecycle.py archive-link \
-  --state .project-lifecycle-123.json \
-  --manifest .project-execution-123/manifest.json --publish
+  --state .project/lifecycle-123.json \
+  --manifest .project/execution-123/manifest.json --publish
 ```
 
 只有通过该校验并关联到当前 Project/Task 的归档，才满足 `audit` 到 `completed` 的执行归档门禁。

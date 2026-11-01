@@ -41,7 +41,9 @@ class ExecutionCaptureTest(unittest.TestCase):
     def test_default_paths_are_scoped_by_task_id(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
-            (root / ".project-task-214.json").write_text(
+            metadata = root / ".project"
+            metadata.mkdir()
+            (metadata / "task-214.json").write_text(
                 json.dumps({"project_id": 8, "task_id": 214}), encoding="utf-8"
             )
             events = root / "events.jsonl"
@@ -51,8 +53,8 @@ class ExecutionCaptureTest(unittest.TestCase):
                 "--input-file", str(events), "--incomplete",
             ])
             capture.capture(args)
-            self.assertEqual(args.state, root.resolve() / ".project-execution-214.json")
-            self.assertEqual(args.output_dir, root.resolve() / ".project-execution-214")
+            self.assertEqual(args.state, root.resolve() / ".project" / "execution-214.json")
+            self.assertEqual(args.output_dir, root.resolve() / ".project" / "execution-214")
             self.assertTrue(args.state.is_file())
             self.assertTrue((args.output_dir / "manifest.json").is_file())
 

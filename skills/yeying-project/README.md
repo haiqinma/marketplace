@@ -71,7 +71,7 @@ Verify read access before any write operation:
 python3 scripts/project_api.py projects
 ```
 
-Task-local files such as `.project-task-<task-id>.json`, `.project-lifecycle-<task-id>.json`, and `.project-execution-<task-id>.json` are task bindings and lifecycle state, not credential files. They must never contain AK/SK and should remain outside Git.
+Task-local files live in the repository-root `.project/` directory as `task-<task-id>.json`, `lifecycle-<task-id>.json`, and `execution-<task-id>.json`; execution archives are stored in `execution-<task-id>/`. These are task bindings and lifecycle state, not credential files. They must never contain AK/SK, and `/.project/` should remain outside Git. Existing root-level `.project-*` state remains supported for compatibility.
 
 ### Boundaries
 

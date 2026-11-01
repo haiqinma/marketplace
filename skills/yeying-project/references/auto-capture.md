@@ -8,7 +8,7 @@
 
 1. `--project-id` 和 `--task-id`；
 2. `YEYING_PROJECT_ID` 和 `YEYING_PROJECT_TASK_ID`；
-3. 当前目录或父目录最近的 `.project-task-<task-id>.json`；仅当找到唯一标记时可自动选择。
+3. 当前目录或父目录最近的 `.project/task-<task-id>.json`；仅当找到唯一任务 ID 时可自动选择。旧版根目录 `.project-task-<task-id>.json` 仍可读取。
 
 标记文件格式：
 
@@ -18,7 +18,7 @@
 
 缺少任一 ID 时采集器失败关闭，不会上传。标记文件只保存任务绑定，不保存 AK/SK。
 
-同一工作区存在多个 `.project-task-<task-id>.json` 时，必须通过 `--task-id` 或 `YEYING_PROJECT_TASK_ID` 选择任务；采集器不会猜测。任务 123 的执行状态和输出目录应分别使用 `.project-execution-123.json` 与 `.project-execution-123/`。
+同一工作区存在多个任务 ID 时，必须通过 `--task-id` 或 `YEYING_PROJECT_TASK_ID` 选择任务；采集器不会猜测。任务 123 的执行状态和输出目录应分别使用 `.project/execution-123.json` 与 `.project/execution-123/`。
 
 这不是 Project 配置，而是客户端适配层的统一输入协议。适配器只负责把原生事件转换为以下字段，不能上传 AK/SK、Cookie、私钥或隐藏推理内容。
 
@@ -56,9 +56,9 @@ Claude Hook 逐事件持久化方式见 [Claude Code Hook 接入](./claude-hooks
 ```bash
 cat events.jsonl | python3 scripts/project_execution_capture.py \
   --project-id 8 --task-id 123 --source-tool claude --model claude-sonnet \
-  --state /path/to/repository/.project-execution-123.json \
-  --output-dir /path/to/repository/.project-execution-123 \
-  --lifecycle-file /path/to/repository/.project-lifecycle-123.json \
+  --state /path/to/repository/.project/execution-123.json \
+  --output-dir /path/to/repository/.project/execution-123 \
+  --lifecycle-file /path/to/repository/.project/lifecycle-123.json \
   --incomplete --missing "客户端未提供隐藏上下文"
 ```
 
@@ -67,7 +67,7 @@ cat events.jsonl | python3 scripts/project_execution_capture.py \
 ```bash
 cat events.jsonl | python3 scripts/project_execution_capture.py \
   --source-tool claude --model "<model-id>" \
-  --state .project-execution-123.json --output-dir .project-execution-123 \
+  --state .project/execution-123.json --output-dir .project/execution-123 \
   --incomplete --missing "客户端未提供隐藏上下文"
 ```
 

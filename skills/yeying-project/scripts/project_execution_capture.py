@@ -30,7 +30,7 @@ from project_execution_archive import (
     redact,
     write_json,
 )
-from project_task_binding import TaskBindingError, resolve_binding
+from project_task_binding import TaskBindingError, lifecycle_state_path, resolve_binding
 
 
 ROLE_BY_TYPE = {
@@ -44,7 +44,8 @@ ROLE_BY_TYPE = {
 def _binding_workdir(args: argparse.Namespace, binding: dict[str, Any]) -> Path:
     source = str(binding.get("source") or "")
     if source not in ("arguments", "environment"):
-        return Path(source).expanduser().resolve().parent
+        marker_dir = Path(source).expanduser().resolve().parent
+        return marker_dir.parent if marker_dir.name == ".project" else marker_dir
     root = (args.binding_root or Path.cwd()).expanduser().resolve()
     return root.parent if root.is_file() else root
 
@@ -54,7 +55,7 @@ def prepare_new_state(args: argparse.Namespace) -> dict[str, Any]:
     workdir = _binding_workdir(args, binding)
     args.state = args.state or default_execution_state_path(workdir, binding["task_id"])
     args.output_dir = args.output_dir or default_execution_output_dir(workdir, binding["task_id"])
-    default_lifecycle = workdir / f".project-lifecycle-{binding['task_id']}.json"
+    default_lifecycle = lifecycle_state_path(workdir, binding["task_id"])
     if args.lifecycle_file is None and default_lifecycle.is_file():
         args.lifecycle_file = default_lifecycle
     return binding
@@ -157,8 +158,8 @@ def parser() -> argparse.ArgumentParser:
     command.add_argument("--binding-root", type=Path, help="任务绑定文件搜索起点，默认当前目录")
     add_agent_arguments(command, include_source_tool=True, source_tool_required=True)
     command.add_argument("--execution-id", default=None)
-    command.add_argument("--state", type=Path, help="默认写入绑定目录 .project-execution-<task-id>.json")
-    command.add_argument("--output-dir", type=Path, help="默认写入绑定目录 .project-execution-<task-id>/")
+    command.add_argument("--state", type=Path, help="默认写入绑定目录 .project/execution-<task-id>.json")
+    command.add_argument("--output-dir", type=Path, help="默认写入绑定目录 .project/execution-<task-id>/")
     command.add_argument("--lifecycle-file", type=Path, help="研发生命周期 JSON 快照")
     command.add_argument("--input-file", type=Path)
     completion = command.add_mutually_exclusive_group()
