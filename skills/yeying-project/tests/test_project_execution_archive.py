@@ -26,12 +26,22 @@ class ExecutionArchiveTest(unittest.TestCase):
         root = Path("/tmp/workspace")
         self.assertEqual(
             archive.default_execution_state_path(root, 214),
-            root / ".project-execution-214.json",
+            root / ".project" / "execution-214.json",
         )
         self.assertEqual(
             archive.default_execution_output_dir(root, 214),
-            root / ".project-execution-214",
+            root / ".project" / "execution-214",
         )
+
+    def test_default_paths_reuse_existing_legacy_files(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            legacy_state = root / ".project-execution-214.json"
+            legacy_output = root / ".project-execution-214"
+            legacy_state.touch()
+            legacy_output.mkdir()
+            self.assertEqual(archive.default_execution_state_path(root, 214), legacy_state)
+            self.assertEqual(archive.default_execution_output_dir(root, 214), legacy_output)
 
     def test_redaction_keeps_normal_field_names(self):
         value = archive.redact({

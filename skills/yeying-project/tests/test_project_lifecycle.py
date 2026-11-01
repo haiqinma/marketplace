@@ -198,9 +198,9 @@ class LifecycleTest(unittest.TestCase):
                 state_path = lifecycle.default_state_path(root, 123)
                 state = lifecycle.initialize(8, 123, root, state_path)
             self.assertEqual(state["task_id"], 123)
-            self.assertTrue((root / ".project-task-123.json").is_file())
+            self.assertTrue((root / ".project" / "task-123.json").is_file())
             self.assertTrue((root / ".project-task-999.json").is_file())
-            self.assertEqual(state_path.name, ".project-lifecycle-123.json")
+            self.assertEqual(state_path, root / ".project" / "lifecycle-123.json")
 
     def test_initialize_rejects_conflicting_task_specific_marker(self):
         with tempfile.TemporaryDirectory() as tmp:

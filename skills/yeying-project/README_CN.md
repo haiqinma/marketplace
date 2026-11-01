@@ -70,7 +70,7 @@ chmod 600 ~/.yeying/skills/project/config.toml
 python3 scripts/project_api.py projects
 ```
 
-`.project-task-<task-id>.json`、`.project-lifecycle-<task-id>.json` 和 `.project-execution-<task-id>.json` 等文件是任务绑定和生命周期状态，不是凭证文件。它们不得包含 AK/SK，也不应提交到 Git。
+任务绑定和生命周期状态统一保存在项目根目录的 `.project/` 中：`task-<task-id>.json`、`lifecycle-<task-id>.json`、`execution-<task-id>.json`，执行归档位于 `execution-<task-id>/`。这些文件不是凭证文件，不得包含 AK/SK；Git 应忽略根目录下的 `/.project/`。为兼容旧工作区，根目录 `.project-*` 状态文件仍可读取和续用。
 
 ### 边界
 

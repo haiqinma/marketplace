@@ -26,6 +26,7 @@ from project_agent_context import (
     primary_model,
 )
 from project_api import ProjectApiError, ensure_task_dialog_id, load_config, request_api, request_upload
+from project_task_binding import execution_output_dir, execution_state_path, lifecycle_state_path
 
 
 SCHEMA = "yeying.project.execution-archive.v1"
@@ -54,11 +55,11 @@ def now() -> str:
 
 
 def default_execution_state_path(workdir: Path, task_id: int) -> Path:
-    return workdir / f".project-execution-{task_id}.json"
+    return execution_state_path(workdir, task_id)
 
 
 def default_execution_output_dir(workdir: Path, task_id: int) -> Path:
-    return workdir / f".project-execution-{task_id}"
+    return execution_output_dir(workdir, task_id)
 
 
 def redact(value: Any, key: str = "") -> Any:
@@ -368,8 +369,8 @@ def build_parser() -> argparse.ArgumentParser:
     add_agent_arguments(start, include_source_tool=True, source_tool_required=True)
     start.add_argument("--execution-id")
     start.add_argument("--lifecycle-file", type=Path, help="研发生命周期 JSON 快照")
-    start.add_argument("--state", type=Path, help="默认写入当前目录 .project-execution-<task-id>.json")
-    start.add_argument("--output-dir", type=Path, help="默认写入当前目录 .project-execution-<task-id>/")
+    start.add_argument("--state", type=Path, help="默认写入当前目录 .project/execution-<task-id>.json")
+    start.add_argument("--output-dir", type=Path, help="默认写入当前目录 .project/execution-<task-id>/")
 
     append = sub.add_parser("append", help="追加一条可获得的执行记录")
     append.add_argument("--state", type=Path, required=True)
@@ -408,7 +409,7 @@ def main() -> int:
             state_path = args.state or default_execution_state_path(workdir, args.task_id)
             output_dir = args.output_dir or default_execution_output_dir(workdir, args.task_id)
             lifecycle_file = args.lifecycle_file
-            default_lifecycle = workdir / f".project-lifecycle-{args.task_id}.json"
+            default_lifecycle = lifecycle_state_path(workdir, args.task_id)
             if lifecycle_file is None and default_lifecycle.is_file():
                 lifecycle_file = default_lifecycle
             agent = context_from_args(args, missing_reason="host did not expose the active model")

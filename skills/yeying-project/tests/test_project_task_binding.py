@@ -12,6 +12,34 @@ from project_task_binding import TaskBindingError, resolve_binding  # noqa: E402
 
 
 class TaskBindingTest(unittest.TestCase):
+    def test_project_directory_marker_is_used(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            work = root / "repo" / "src"
+            work.mkdir(parents=True)
+            marker = root / "repo" / ".project" / "task-123.json"
+            marker.parent.mkdir()
+            marker.write_text(json.dumps({"project_id": 8, "task_id": 123}), encoding="utf-8")
+            binding = resolve_binding(start_dir=work)
+            self.assertEqual(binding["project_id"], 8)
+            self.assertEqual(binding["task_id"], 123)
+            self.assertEqual(binding["source"], str(marker.resolve()))
+
+    def test_legacy_and_new_marker_for_same_task_are_compatible(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            metadata = root / ".project"
+            metadata.mkdir()
+            (metadata / "task-123.json").write_text(
+                json.dumps({"project_id": 8, "task_id": 123}), encoding="utf-8"
+            )
+            (root / ".project-task-123.json").write_text(
+                json.dumps({"project_id": 8, "task_id": 123}), encoding="utf-8"
+            )
+            binding = resolve_binding(start_dir=root)
+            self.assertEqual(binding["task_id"], 123)
+            self.assertEqual(binding["source"], str((metadata / "task-123.json").resolve()))
+
     def test_nearest_marker_is_used(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
